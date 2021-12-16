@@ -91,3 +91,4 @@ if __name__ == "__main__":
                         for race_id in scrape_raceids(driver, race_date):
                             for horse in scrape_horses(race_id):
                                 db.execute(sqlite.INSERT_INTO_HORSE, horse)
+                        db.commit()

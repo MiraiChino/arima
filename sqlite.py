@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS horse (
     hold_num INTEGER NOT NULL,
     day_num INTEGER NOT NULL,
     race_num INTEGER NOT NULL,
+    race_date TEXT NOT NULL,
     unique(
         result,
         gate,
@@ -88,7 +89,8 @@ CREATE TABLE IF NOT EXISTS horse (
         place_code,
         hold_num,
         day_num,
-        race_num
+        race_num,
+        race_date
     )
 );
 """
@@ -129,8 +131,9 @@ INSERT INTO horse (
     place_code,
     hold_num,
     day_num,
-    race_num
+    race_num,
+    race_date
 ) VALUES (
-    ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+    ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
 ) ON CONFLICT DO NOTHING;
 """

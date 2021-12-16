@@ -69,9 +69,10 @@ def scrape_horses(race_id):
     racedata1 = text.extract_racedata1(s.find("div", class_="RaceData01").text)
     racedata2 = text.extract_racedata2(s.find("div", class_="RaceData02").text)
     racedata3 = text.extract_racedata3(race_id)
+    racedate = s.find("dd", class_="Active").text
     for horse_html in s.find_all("tr",class_="HorseList"):
         if horse := text.extract_horse(horse_html):
-            yield *horse, racename, *racedata1, *racedata2, *racedata3
+            yield *horse, racename, *racedata1, *racedata2, *racedata3, racedate
 # 長さ:35
 # (16, 4, 8, 'ロイヤルパープル', '牡', 3, 56.0, 'マーフ', '1:16.0', '3/4', 2, 3.1, 39.9, '13-13', '美浦加藤征', 516, 2,
 # '3歳未勝利',

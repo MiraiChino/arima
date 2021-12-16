@@ -70,8 +70,8 @@ def scrape_horses(race_id):
     racedata2 = text.extract_racedata2(s.find("div", class_="RaceData02").text)
     racedata3 = text.extract_racedata3(race_id)
     for horse_html in s.find_all("tr",class_="HorseList"):
-        horse = text.extract_horse(horse_html)
-        yield *horse, racename, *racedata1, *racedata2, *racedata3
+        if horse := text.extract_horse(horse_html):
+            yield *horse, racename, *racedata1, *racedata2, *racedata3
 # 長さ:35
 # (16, 4, 8, 'ロイヤルパープル', '牡', 3, 56.0, 'マーフ', '1:16.0', '3/4', 2, 3.1, 39.9, '13-13', '美浦加藤征', 516, 2,
 # '3歳未勝利',
@@ -83,12 +83,15 @@ if __name__ == "__main__":
     import sqlite
     with sqlite.open("netkeiba.sqlite") as conn:
         conn.execute(sqlite.CREATE_TABLE_HORSE)
-        db = conn.cursor()
+        cur = conn.cursor()
         with chrome.driver() as driver:
             for year in range(2000, 2021+1):
                 for month in range(1, 12+1):
                     for race_date in scrape_racedates(year, month):
+                        horses = []
                         for race_id in scrape_raceids(driver, race_date):
                             for horse in scrape_horses(race_id):
-                                db.execute(sqlite.INSERT_INTO_HORSE, horse)
-                        db.commit()
+                                horses.append(horse)
+                        cur.executemany(sqlite.INSERT_INTO_HORSE, horses)
+                        conn.commit()
+                        print(f"database: inserted race data in {year}-{month}")

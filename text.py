@@ -7,7 +7,7 @@ td = re.compile(r"</td>")
 tag = re.compile(r"<[^>]*?>")
 bracket_l = re.compile(r"\[")
 bracket_r = re.compile(r"\]")
-racedata1 = re.compile(r"(.+)発走/(.)(\d+)m.*\((.)\)/天候:(.)/馬場:(.)")
+racedata1 = re.compile(r"(.+)発走/(.)(\d+)m.*\((.*)\)/天候:(.)/馬場:(.)")
 racedata2 = re.compile(r"日目(.+)\xa0\xa0\xa0\xa0\xa0.*本賞金:(\d+),(\d+),(\d+),(\d+),(\d+)")
 racedata3 = re.compile(r"(\d\d\d\d)(\d\d)(\d\d)(\d\d)(\d\d)")
 horse_weight = re.compile(r"(\d+)\((.*)\)")
@@ -29,12 +29,18 @@ def extract_horse(text):
     text = bracket_r.sub("", text)
     result, gate, horse_no, name, sa, penalty, jockey,\
         time, margin, pop, odds, last3f, corner, barn, w, _ = text.split(",")
-    weight, weight_change = horse_weight.match(w).groups()
-    sex, age = sa[:1], sa[1:]
-    age = unicodedata.normalize("NFKC", age)
-    return int(result), int(gate), int(horse_no), name, sex, int(age), float(penalty), jockey, \
-            time, margin, int(pop), float(odds), float(last3f), corner, barn, int(weight), int(weight_change)
-
+    try:
+        result, gate, horse_no = int(result), int(gate), int(horse_no)
+        sex, age =sa[:1], sa[1:]
+        age = unicodedata.normalize("NFKC", age)
+        penalty, pop, odds, last3f = float(penalty), int(pop), float(odds), float(last3f)
+        weight, weight_change = horse_weight.match(w).groups()
+        weight, weight_change = int(weight), int(weight_change)
+        return result, gate, horse_no, name, sex, age, penalty, jockey, \
+                time, margin, pop, odds, last3f, corner, barn, weight, weight_change
+    except:
+        return None
+        
 #発走時刻,ダ芝,距離,右左,天候,馬場
 def extract_racedata1(racedata1_text):
     text = remove_trash(racedata1_text)

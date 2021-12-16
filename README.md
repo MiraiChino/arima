@@ -1,5 +1,9 @@
 # arima
 
+# 過去のレース情報をスクレイピングしてDBに保存
+- `python netkeiba.py`
+    - 
+
 ## 参考
 - スクレイピング
     - [netkeibaのWebスクレイピングをPythonで行う【競馬開催日の抽出】 | ジコログ](https://self-development.info/netkeiba%E3%81%AEweb%E3%82%B9%E3%82%AF%E3%83%AC%E3%82%A4%E3%83%94%E3%83%B3%E3%82%B0%E3%82%92python%E3%81%A7%E8%A1%8C%E3%81%86%E3%80%90%E7%AB%B6%E9%A6%AC%E9%96%8B%E5%82%AC%E6%97%A5%E3%81%AE%E6%8A%BD/)

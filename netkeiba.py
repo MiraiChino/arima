@@ -85,8 +85,9 @@ if __name__ == "__main__":
         conn.execute(sqlite.CREATE_TABLE_HORSE)
         db = conn.cursor()
         with chrome.driver() as driver:
-            for year, month in ((y, m) for y in range(2000, 2021+1) for m in range(1, 12+1)):
-                for race_date in scrape_racedates(year, month):
-                    for race_id in scrape_raceids(driver, race_date):
-                        for horse in scrape_horses(race_id):
-                            db.execute(sqlite.INSERT_INTO_HORSE, horse)
+            for year in range(2000, 2021+1):
+                for month in range(1, 12+1):
+                    for race_date in scrape_racedates(year, month):
+                        for race_id in scrape_raceids(driver, race_date):
+                            for horse in scrape_horses(race_id):
+                                db.execute(sqlite.INSERT_INTO_HORSE, horse)

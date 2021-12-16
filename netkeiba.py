@@ -85,7 +85,7 @@ if __name__ == "__main__":
         conn.execute(sqlite.CREATE_TABLE_HORSE)
         cur = conn.cursor()
         with chrome.driver() as driver:
-            for year in range(2000, 2021+1):
+            for year in range(2008, 2021+1):
                 for month in range(1, 12+1):
                     for race_date in scrape_racedates(year, month):
                         horses = []

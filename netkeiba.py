@@ -1,4 +1,3 @@
-import re
 import time
 import traceback
 from functools import wraps
@@ -67,18 +66,18 @@ def scrape_horses(race_id):
     s = soup(race_html)
     racename = text.remove_trash(s.find("div", class_="RaceName").text)
     racedata1 = text.extract_racedata1(s.find("div", class_="RaceData01").text)
-    racedata2 = text.extract_racedata2(s.find("div", class_="RaceData02").text)
+    racedata2 = text.extract_racedata2(s.find("div", class_="RaceData02"))
     racedata3 = text.extract_racedata3(race_id)
     racedate = s.find("dd", class_="Active").text
     for horse_html in s.find_all("tr",class_="HorseList"):
         if horse := text.extract_horse(horse_html):
             yield *horse, racename, *racedata1, *racedata2, *racedata3, racedate
-# 長さ:35
+# 長さ:36
 # (16, 4, 8, 'ロイヤルパープル', '牡', 3, 56.0, 'マーフ', '1:16.0', '3/4', 2, 3.1, 39.9, '13-13', '美浦加藤征', 516, 2,
 # '3歳未勝利',
 # '10:55', 'ダ', 1200, '右', '晴', '良',
 # 'サラ系３歳未勝利', 510, 200, 130, 77, 51,
-# 2020, 6, 1, 1, 3)
+# 2020, 6, 1, 1, 3, '1月19日(日)')
 
 if __name__ == "__main__":
     import sqlite
@@ -95,4 +94,4 @@ if __name__ == "__main__":
                                 horses.append(horse)
                         cur.executemany(sqlite.INSERT_INTO_HORSE, horses)
                         conn.commit()
-                        print(f"database: inserted race data in {year}-{month}")
+                        print(f"database: inserted race data in {year}-{month}-{race_date}")

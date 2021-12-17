@@ -8,7 +8,7 @@ tag = re.compile(r"<[^>]*?>")
 bracket_l = re.compile(r"\[")
 bracket_r = re.compile(r"\]")
 racedata1 = re.compile(r"(.+)発走/(.)(\d+)m.*\((.*)\)/天候:(.*)/馬場:(.*)")
-racedata2 = re.compile(r"日目(.+)\xa0\xa0\xa0\xa0\xa0.*本賞金:(\d+),(\d+),(\d+),(\d+),(\d+)")
+racedata2 = re.compile(r"日目(</span><span>)+(.+?)</span>.*本賞金:(\d+),(\d+),(\d+),(\d+),(\d+)")
 racedata3 = re.compile(r"(\d\d\d\d)(\d\d)(\d\d)(\d\d)(\d\d)")
 horse_weight = re.compile(r"(\d+)\((.*)\)")
 raceid = re.compile(r"\/race\/result.html\?race_id=(.*)&rf=race_list")
@@ -48,9 +48,9 @@ def extract_racedata1(racedata1_text):
     return start_time, field, int(distance), turn, weather, field_condition
 
 #レース条件,1位賞金,2位賞金,3位賞金,4位賞金,5位賞金
-def extract_racedata2(racedata2_text):
-    text = remove_trash(racedata2_text)
-    race_condition, prize1, prize2, prize3, prize4, prize5 = racedata2.search(text).groups()
+def extract_racedata2(racedata2_html):
+    text = remove_trash(racedata2_html)
+    _, race_condition, prize1, prize2, prize3, prize4, prize5 = racedata2.search(text).groups()
     return race_condition, int(prize1), int(prize2), int(prize3), int(prize4), int(prize5)
 
 #開催年,競馬場コード,開催回数,日数,レース数

@@ -62,7 +62,7 @@ def yield_s_time(df):
     yield "margin", pd.concat(s_margin_list)
     yield "time", df["time"].apply(to_seconds)
 
-def dataframe(df):
+def format(df):
     result = df.copy()
     result["race_date"] = s_racedate(df)
     result["cos_racedate"] = s_cosracedate(result["race_date"])

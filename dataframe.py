@@ -15,6 +15,13 @@ def to_seconds(x):
 def to_cos(x, max):
     return np.cos(math.radians(90 - (x / max)*360))
 
+def get_prize(x):
+    no = x["result"]
+    if 1 <= no <= 5:
+        return x[f"prize{no}"]
+    else:
+        return 0
+
 def s_cosracedate(s_racedate):
     return s_racedate.dt.dayofyear.apply(to_cos, max=365)
 
@@ -36,6 +43,9 @@ def s_revised_race_condition(df):
     mask_bad_rc = df.eval("race_condition in ['未勝利', '新馬', '５００万下', '１０００万下', '15頭', '16頭', '12頭', '10頭', '14頭', '13頭']")
     result = df["race_condition"].mask(mask_bad_rc, df["race_name"])
     return result
+
+def s_prize(df):
+    return df.apply(get_prize, axis="columns")
 
 def yield_s_corner34(df):
     s_corner = df["corner"].replace('^(\d+)-(\d+)-(\d+)-(\d+)$', r'\3-\4', regex=True)
@@ -68,8 +78,10 @@ def format(df):
     result["cos_racedate"] = s_cosracedate(result["race_date"])
     result["cos_starttime"] = s_cosstarttime(df)
     result["jockey"] = s_jockey(df)
+    result["prize"] = s_prize(df)
     str_columns = ["name", "sex", "jockey", "barn", "turn", "weather", "field_condition", "race_condition"]
     for column, series in chain(yield_s_encoded(df, str_columns), yield_s_corner34(df), yield_s_time(df)):
         result[column] = series
-    result = result.drop(columns=["corner", "race_name", "start_time", "field", "year"])
+    result = result.drop(columns=["corner", "race_name", "start_time", "field", "year",\
+                                    "prize1", "prize2", "prize3", "prize4", "prize5"])
     return result

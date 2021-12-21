@@ -1,5 +1,13 @@
 # arima
 
+## requirements
+```
+brew install node
+pip install -r requirements.txt
+jupyter nbextension enable --py widgetsnbextension
+jupyter labextension install @jupyter-widgets/jupyterlab-manager
+```
+
 ## 過去のレース情報をスクレイピングしてDBに保存
 - `python netkeiba.py`
 
@@ -58,3 +66,5 @@
     - [特徴量からの周期性の抽出方法 - Qiita](https://qiita.com/squash/items/299f73a21bc46766c60f)
     - [Python: Target Encoding のやり方について - CUBE SUGAR CONTAINER](https://blog.amedama.jp/entry/target-mean-encoding-types)
     - [Kaggle TalkingData Fraud Detection コンペの解法まとめ(基本編) | Ad-Tech Lab Blog](https://blog.recruit.co.jp/rco/kaggle_talkingdata_basic/)
+- その他
+    - [たった数行でpandasを高速化する2つのライブラリ(pandarallel/swifter) - フリーランチ食べたい](https://blog.ikedaosushi.com/entry/2020/07/26/173109)

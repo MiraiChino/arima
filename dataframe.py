@@ -3,9 +3,11 @@ from itertools import chain
 
 import numpy as np
 import pandas as pd
+from pandarallel import pandarallel
 from sklearn.preprocessing import LabelEncoder
 
 label_encoder = LabelEncoder()
+pandarallel.initialize()
 
 def to_seconds(x):
     min, secdot = x.split(':')
@@ -45,7 +47,7 @@ def s_revised_race_condition(df):
     return result
 
 def s_prize(df):
-    return df.apply(get_prize, axis="columns")
+    return df.parallel_apply(get_prize, axis="columns")
 
 def yield_s_corner34(df):
     s_corner = df["corner"].replace('^(\d+)-(\d+)-(\d+)-(\d+)$', r'\3-\4', regex=True)
@@ -155,7 +157,7 @@ def feature(df):
     features = [df_copied]
     for column_name, func in feat_pattern.items():
         print(f"calculating {column_name} ...", flush=True)
-        df_feat = df.apply(agg_history, f=func, pattern=hist_pattern, df=df, axis="columns")
+        df_feat = df.parallel_apply(agg_history, f=func, pattern=hist_pattern, df=df, axis="columns")
         df_feat.columns = [f"{column_name}_{x}" for x in hist_pattern]
         features.append(df_feat)
     return pd.concat(features, axis="columns")

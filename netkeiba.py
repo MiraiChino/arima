@@ -2,6 +2,7 @@ import time
 import traceback
 from functools import wraps
 
+import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
@@ -73,25 +74,33 @@ def scrape_horses(race_id):
         if horse := text.extract_horse(horse_html):
             yield *horse, racename, *racedata1, *racedata2, *racedata3, racedate
 # 長さ:36
-# (16, 4, 8, 'ロイヤルパープル', '牡', 3, 56.0, 'マーフ', '1:16.0', '3/4', 2, 3.1, 39.9, '13-13', '美浦加藤征', 516, 2,
-# '3歳未勝利',
-# '10:55', 'ダ', 1200, '右', '晴', '良',
-# 'サラ系３歳未勝利', 510, 200, 130, 77, 51,
-# 2020, 6, 1, 1, 3, '1月19日(日)')
+# (16, 4, 8, 'ロイヤルパープル', '牡', 3, 56.0, 'マーフ',
+# '1:16.0', '3/4', 2, 3.1, 39.9, '13-13', '美浦加藤征', 516,
+# 2, '3歳未勝利', '10:55', 'ダ', 1200, '右',
+# '晴', '良', 'サラ系３歳未勝利', 510, 200,
+# 130, 77, 51, 2020, 6, 1, 1,
+# 3, '1月19日(日)')
+COLUMNS = (
+    "result", "gate", "horse_no", "name", "sex", "age", "penalty", "jockey",
+    "time", "margin", "pop", "odds", "last3f", "corner", "barn", "weight",
+    "weight_change","race_name", "start_time", "field", "distance", "turn",
+    "weather", "field_condition", "race_condition", "prize1", "prize2",
+    "prize3", "prize4", "prize5", "year", "place_code", "hold_num", "day_num",
+    "race_num", "race_date"
+)
 
 if __name__ == "__main__":
-    import sqlite
-    with sqlite.open("netkeiba.sqlite") as conn:
-        conn.execute(sqlite.CREATE_TABLE_HORSE)
-        cur = conn.cursor()
-        with chrome.driver() as driver:
-            for year in range(2008, 2021+1):
-                for month in range(1, 12+1):
-                    for race_date in scrape_racedates(year, month):
-                        horses = []
-                        for race_id in scrape_raceids(driver, race_date):
-                            for horse in scrape_horses(race_id):
-                                horses.append(horse)
-                        cur.executemany(sqlite.INSERT_INTO_HORSE, horses)
-                        conn.commit()
-                        print(f"database: inserted race data in {year}-{month}-{race_date}")
+    import sqlite3
+
+    with chrome.driver() as driver:
+        for year in range(2008, 2021+1):
+            for month in range(1, 12+1):
+                for race_date in scrape_racedates(year, month):
+                    horses = []
+                    for race_id in scrape_raceids(driver, race_date):
+                        for horse in scrape_horses(race_id):
+                            horses.append(horse)
+                    with sqlite3.connect("netkeiba.sqlite") as conn:
+                        df = pd.DataFrame(horses, columns=COLUMNS)
+                        df.to_sql('horse', con=conn, if_exists='append')
+                    print(f"database: inserted race data in {year}-{month}-{race_date}")

@@ -79,9 +79,81 @@ def format(df):
     result["cos_starttime"] = s_cosstarttime(df)
     result["jockey"] = s_jockey(df)
     result["prize"] = s_prize(df)
-    str_columns = ["name", "sex", "jockey", "barn", "turn", "weather", "field_condition", "race_condition"]
+    str_columns = ["name", "sex", "jockey", "barn", "turn", "weather", "field", "field_condition", "race_condition"]
     for column, series in chain(yield_s_encoded(df, str_columns), yield_s_corner34(df), yield_s_time(df)):
         result[column] = series
-    result = result.drop(columns=["corner", "race_name", "start_time", "field", "year",\
+    result = result.drop(columns=["corner", "race_name", "start_time", "year",\
                                     "prize1", "prize2", "prize3", "prize4", "prize5"])
     return result
+
+def agg_history(x, f, pattern, df):
+    result = []
+    name = x["name"]
+    now_date = x["race_date"]
+    history = df.query(f"name == {name} and race_date < '{now_date}'").iloc[::-1]
+    for i in pattern:
+        if type(i) is int:
+            data = history.head(i)
+        elif i == "all":
+            data = history
+        result.append(f(data, x))
+    return pd.Series(result)
+
+def interval(history, now):
+    return (now["race_date"] - history["race_date"]).mean() / np.timedelta64(1, 'D')
+
+def same_count(column):
+    def wrapper(history, now):
+        return (history[column] == now[column]).sum()
+    return wrapper
+
+def ave(column):
+    def wrapper(history, now):
+        return history[column].mean()
+    return wrapper
+
+def time(ave_time):
+    def wrapper(history, now):
+        values = []
+        for index, row in history.iterrows():
+            f = row["field"]
+            d = row["distance"]
+            fc = row["field_condition"]
+            values.append(row["time"] - ave_time[(f, d, fc)])
+        return np.mean(values)
+    return wrapper
+
+def diff(column):
+    def wrapper(history, now):
+        return (history[column] - now[column]).mean()
+    return wrapper
+
+def feature(df):
+    ave_time = {key: race["time"].mean() for key, race in df.groupby(["field", "distance", "field_condition"])}
+    hist_pattern = [1, 2, 3, 4, 5, 10, "all"]
+    feat_pattern = {
+        "horse_interval": interval,
+        "horse_place": same_count("place_code"),
+        "horse_odds": ave("odds"),
+        "horse_pop": ave("pop"),
+        "horse_result": ave("result"),
+        "horse_jockey": same_count("jockey"),
+        "horse_penalty": ave("penalty"),
+        "horse_distance": diff("distance"),
+        "horse_weather": same_count("weather"),
+        "horse_fc": same_count("field_condition"),
+        "horse_time": time(ave_time),
+        "horse_margin": ave("margin"),
+        "horse_corner3": ave("corner3"),
+        "horse_corner4": ave("corner4"),
+        "horse_last3f": ave("last3f"),
+        "horse_weight": ave("weight"),
+        "horse_wc": ave("wieght_change"),
+        "horse_prize": ave("prize"),
+    }
+    past_features = []
+    for column_name, func in feat_pattern.items():
+        df_feat = df.apply(agg_history, f=func, pattern=hist_pattern, df=df, axis="columns")
+        df_feat.columns = [f"{column_name}_{x}" for x in hist_pattern]
+        past_features.append(df_feat)
+    return pd.concat(past_features, axis="columns")

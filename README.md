@@ -3,6 +3,45 @@
 ## 過去のレース情報をスクレイピングしてDBに保存
 - `python netkeiba.py`
 
+## 特徴量一覧
+| いつの情報か | 変数             | 中身                                      | Xのパターン      | 
+| ------------ | ---------------- | ----------------------------------------- | ---------------- | 
+| 当日とれる   | gate             | 枠番                                      |                  | 
+|              | horse_no         | 馬番                                      |                  | 
+|              | name             | 名前                                      |                  | 
+|              | sex              | 性別                                      |                  | 
+|              | age              | 年齢                                      |                  | 
+|              | penalty          | 斤量                                      |                  | 
+|              | jockey           | 騎手                                      |                  | 
+|              | barn             | 厩舎                                      |                  | 
+|              | fielad           | 芝orダ                                    |                  | 
+|              | corner           | 右or左                                    |                  | 
+|              | distance         | 距離                                      |                  | 
+|              | place_code       | 開催場所                                  |                  | 
+|              | weather          | 天気                                      |                  | 
+|              | field_condition  | 馬場                                      |                  | 
+|              | race_condition   | レース条件                                |                  | 
+|              | cos_racedate     | 開催日cos                                 |                  | 
+|              | cos_starttime    | 発走時刻cos                               |                  | 
+| 過去から計算 | horse_interval_X | 過去X走からの平均レース間日数             | 1,2,3,4,5,10,all | 
+|              | horse_place_X    | 過去X走までの当日と同じ開催場所の経験回数 | 1,2,3,4,5,10,all | 
+|              | horse_odds_X     | 過去X走までの平均オッズ                   | 1,2,3,4,5,10,all | 
+|              | horse_pop_X      | 過去X走までの平均人気                     | 1,2,3,4,5,10,all | 
+|              | horse_result_X   | 過去X走までの平均着順                     | 1,2,3,4,5,10,all | 
+|              | horse_jockey_X   | 過去X走までの当日と同じ騎手と走った回数   | 1,2,3,4,5,10,all | 
+|              | horse_penalty_X  | 過去X走までの平均斤量                     | 1,2,3,4,5,10,all | 
+|              | horse_distance_X | 過去X走までの平均距離と当日の距離の差     | 1,2,3,4,5,10,all | 
+|              | horse_weather_X  | 過去X走までの当日と同じ天気を走った回数   | 1,2,3,4,5,10,all | 
+|              | horse_fc_X       | 過去X走までの当日と同じ馬場を走った回数   | 1,2,3,4,5,10,all | 
+|              | horse_time_X     | 過去X走までの平均タイムとの差の平均       | 1,2,3,4,5,10,all | 
+|              | horse_margin_X   | 過去X走までの平均着差                     | 1,2,3,4,5,10,all | 
+|              | horse_corner3_X  | 過去X走までの3コーナー平均通過順位        | 1,2,3,4,5,10,all | 
+|              | horse_corner4_X  | 過去X走までの4コーナー平均通過順位        | 1,2,3,4,5,10,all | 
+|              | horse_last3f_X   | 過去X走までの平均last3f                   | 1,2,3,4,5,10,all | 
+|              | horse_weight_X   | 過去X走までの平均体重                     | 1,2,3,4,5,10,all | 
+|              | horse_wc_X       | 過去X走までの平均体重変化                 | 1,2,3,4,5,10,all | 
+|              | horse_prize_X    | 過去X走までの平均獲得賞金                 | 1,2,3,4,5,10,all | 
+
 ## 参考
 - スクレイピング
     - [netkeibaのWebスクレイピングをPythonで行う【競馬開催日の抽出】 | ジコログ](https://self-development.info/netkeiba%E3%81%AEweb%E3%82%B9%E3%82%AF%E3%83%AC%E3%82%A4%E3%83%94%E3%83%B3%E3%82%B0%E3%82%92python%E3%81%A7%E8%A1%8C%E3%81%86%E3%80%90%E7%AB%B6%E9%A6%AC%E9%96%8B%E5%82%AC%E6%97%A5%E3%81%AE%E6%8A%BD/)
@@ -11,7 +50,11 @@
 - ランク学習
     - [機械学習で競馬必勝本に勝てるのか？ 〜Pythonで実装するランク学習〜 - エニグモ開発者ブログ](https://tech.enigmo.co.jp/entry/2020/12/09/100000)
     - [ランク学習でバーチャルスクリーニングする - tonetsの日記](https://tonets.hatenablog.com/entry/2019/12/23/135131)
+    - [[競馬予想AI] ランク学習で着順予想するとなかなか強力だったお話｜とりまる｜note](https://note.com/dataij/n/n5a6d121b13ab?magazine_key=mfc655f2636e0)
 - LightGBM
     - [機械学習で競馬の回収率100%超えを達成した話 - Qiita](https://qiita.com/Mshimia/items/6c54d82b3792925b8199)
 - 特徴量
     - [LightGBMのCategorical Featureによって精度が向上するか？ - Qiita](https://qiita.com/sinchir0/items/b038757e578b790ec96a)
+    - [特徴量からの周期性の抽出方法 - Qiita](https://qiita.com/squash/items/299f73a21bc46766c60f)
+    - [Python: Target Encoding のやり方について - CUBE SUGAR CONTAINER](https://blog.amedama.jp/entry/target-mean-encoding-types)
+    - [Kaggle TalkingData Fraud Detection コンペの解法まとめ(基本編) | Ad-Tech Lab Blog](https://blog.recruit.co.jp/rco/kaggle_talkingdata_basic/)

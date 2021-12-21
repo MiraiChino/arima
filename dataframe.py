@@ -157,7 +157,7 @@ def feature(df):
     features = [df_copied]
     for column_name, func in feat_pattern.items():
         print(f"calculating {column_name} ...", flush=True)
-        df_feat = df.parallel_apply(agg_history, f=func, pattern=hist_pattern, df=df, axis="columns")
+        df_feat = df.parallel_apply(agg_history, args=(func, hist_pattern, df), axis="columns")
         df_feat.columns = [f"{column_name}_{x}" for x in hist_pattern]
         features.append(df_feat)
     return pd.concat(features, axis="columns")

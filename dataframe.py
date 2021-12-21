@@ -116,10 +116,8 @@ def time(ave_time):
     def wrapper(history, now):
         values = []
         for index, row in history.iterrows():
-            f = row["field"]
-            d = row["distance"]
-            fc = row["field_condition"]
-            values.append(row["time"] - ave_time[(f, d, fc)])
+            average = ave_time[(row["field"], row["distance"], row["field_condition"])]
+            values.append((row["time"] - average) / average)
         return np.mean(values)
     return wrapper
 
@@ -151,9 +149,13 @@ def feature(df):
         "horse_wc": ave("wieght_change"),
         "horse_prize": ave("prize"),
     }
-    past_features = []
+
+    df_copied = df.copy()
+    df_copied = df_copied.drop(columns=["result", "hold_num", "day_num", "race_num"])
+    features = [df_copied]
     for column_name, func in feat_pattern.items():
+        print(f"calculating {column_name} ...", flush=True)
         df_feat = df.apply(agg_history, f=func, pattern=hist_pattern, df=df, axis="columns")
         df_feat.columns = [f"{column_name}_{x}" for x in hist_pattern]
-        past_features.append(df_feat)
-    return pd.concat(past_features, axis="columns")
+        features.append(df_feat)
+    return pd.concat(features, axis="columns")

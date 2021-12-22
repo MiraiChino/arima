@@ -8,7 +8,7 @@ def ave(column):
     return wrapper
 
 def interval(history, now, index):
-    return (now[index("race_date")] - history[:, index("race_date")]).mean() / np.timedelta64(1, 'D')
+    return (now[index("race_date")] - history[:, index("race_date")]).astype("timedelta64[D]").mean() / np.timedelta64(1, 'D')
 
 def same_count(column):
     def wrapper(history, now, index):

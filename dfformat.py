@@ -3,11 +3,9 @@ from itertools import chain
 
 import numpy as np
 import pandas as pd
-from pandarallel import pandarallel
 from sklearn.preprocessing import LabelEncoder
 
 label_encoder = LabelEncoder()
-pandarallel.initialize()
 
 def to_seconds(x):
     min, secdot = x.split(':')
@@ -47,7 +45,7 @@ def s_revised_race_condition(df):
     return result
 
 def s_prize(df):
-    return df.parallel_apply(get_prize, axis="columns")
+    return df.apply(get_prize, axis="columns")
 
 def yield_s_corner34(df):
     s_corner = df["corner"].replace('^(\d+)-(\d+)-(\d+)-(\d+)$', r'\3-\4', regex=True)
@@ -87,77 +85,3 @@ def format(df):
     result = result.drop(columns=["corner", "race_name", "start_time", "year",\
                                     "prize1", "prize2", "prize3", "prize4", "prize5"])
     return result
-
-def agg_history(x, f, pattern, df):
-    result = []
-    name = x["name"]
-    now_date = x["race_date"]
-    history = df.query(f"name == {name} and race_date < '{now_date}'").iloc[::-1]
-    for i in pattern:
-        if type(i) is int:
-            data = history.head(i)
-        elif i == "all":
-            data = history
-        result.append(f(data, x))
-    return pd.Series(result)
-
-def interval(history, now):
-    return (now["race_date"] - history["race_date"]).mean() / np.timedelta64(1, 'D')
-
-def same_count(column):
-    def wrapper(history, now):
-        return (history[column] == now[column]).sum()
-    return wrapper
-
-def ave(column):
-    def wrapper(history, now):
-        return history[column].mean()
-    return wrapper
-
-def time(ave_time):
-    def wrapper(history, now):
-        values = []
-        for index, row in history.iterrows():
-            average = ave_time[(row["field"], row["distance"], row["field_condition"])]
-            values.append((row["time"] - average) / average)
-        return np.mean(values)
-    return wrapper
-
-def diff(column):
-    def wrapper(history, now):
-        return (history[column] - now[column]).mean()
-    return wrapper
-
-def feature(df):
-    ave_time = {key: race["time"].mean() for key, race in df.groupby(["field", "distance", "field_condition"])}
-    hist_pattern = [1, 2, 3, 4, 5, 10, "all"]
-    feat_pattern = {
-        "horse_interval": interval,
-        "horse_place": same_count("place_code"),
-        "horse_odds": ave("odds"),
-        "horse_pop": ave("pop"),
-        "horse_result": ave("result"),
-        "horse_jockey": same_count("jockey"),
-        "horse_penalty": ave("penalty"),
-        "horse_distance": diff("distance"),
-        "horse_weather": same_count("weather"),
-        "horse_fc": same_count("field_condition"),
-        "horse_time": time(ave_time),
-        "horse_margin": ave("margin"),
-        "horse_corner3": ave("corner3"),
-        "horse_corner4": ave("corner4"),
-        "horse_last3f": ave("last3f"),
-        "horse_weight": ave("weight"),
-        "horse_wc": ave("wieght_change"),
-        "horse_prize": ave("prize"),
-    }
-
-    df_copied = df.copy()
-    df_copied = df_copied.drop(columns=["result", "hold_num", "day_num", "race_num"])
-    features = [df_copied]
-    for column_name, func in feat_pattern.items():
-        print(f"calculating {column_name} ...", flush=True)
-        df_feat = df.parallel_apply(agg_history, args=(func, hist_pattern, df), axis="columns")
-        df_feat.columns = [f"{column_name}_{x}" for x in hist_pattern]
-        features.append(df_feat)
-    return pd.concat(features, axis="columns")

@@ -53,8 +53,8 @@ def yield_s_corner34(df):
     s_corner = df["corner"].replace('^(\d+)-(\d+)-(\d+)-(\d+)$', r'\3-\4', regex=True)
     s_corner = s_corner.replace('^(\d+)-(\d+)-(\d+)$', r'\2-\3', regex=True)
     df_corner34 = s_corner.str.split('-', expand=True)
-    yield "corner3", df_corner34[0]
-    yield "corner4", df_corner34[1]
+    yield "corner3", df_corner34[0].astype(float)
+    yield "corner4", df_corner34[1].astype(float)
 
 def yield_s_encoded(df, categories):
     df["race_condition"] = s_revised_race_condition(df)

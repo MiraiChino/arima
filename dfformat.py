@@ -82,6 +82,4 @@ def format(df):
     str_columns = ["name", "sex", "jockey", "barn", "turn", "weather", "field", "field_condition", "race_condition"]
     for column, series in chain(yield_s_encoded(df, str_columns), yield_s_corner34(df), yield_s_time(df)):
         result[column] = series
-    result = result.drop(columns=["corner", "race_name", "start_time", "year",\
-                                    "prize1", "prize2", "prize3", "prize4", "prize5"])
     return result

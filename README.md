@@ -1,17 +1,19 @@
 # arima
 
-## requirements
-```
-brew install node
-pip install -r requirements.txt
-jupyter nbextension enable --py widgetsnbextension
-jupyter labextension install @jupyter-widgets/jupyterlab-manager
-```
-
 ## 過去のレース情報をスクレイピングしてDBに保存
 - `python netkeiba.py`
+    - `netkeiba.sqlite`に保存
+
+## 使用データ
+- [netkeiba.com](https://race.netkeiba.com/top/?rf=navi)からスクレイピングしたデータ
+- 2008年1月1日〜2021年12月12日（13年分、48207レース分）
+    - train: 2008年1月1日〜2017年12月31日（9年分、34533レース分）3
+    - valid: 2018年1月1日〜2020年12月31日（3年分、10362レース分）1
+    - test: 2021年1月1日〜2021年12月12日（1年分、3312レース分）
 
 ## 特徴量一覧
+当日17+過去18*7=143
+
 | いつの情報か | 変数             | 中身                                      | Xのパターン      | 
 | ------------ | ---------------- | ----------------------------------------- | ---------------- | 
 | 当日とれる   | gate             | 枠番                                      |                  | 
@@ -23,7 +25,7 @@ jupyter labextension install @jupyter-widgets/jupyterlab-manager
 |              | jockey           | 騎手                                      |                  | 
 |              | barn             | 厩舎                                      |                  | 
 |              | fielad           | 芝orダ                                    |                  | 
-|              | corner           | 右or左                                    |                  | 
+|              | turn             | 右or左                                    |                  | 
 |              | distance         | 距離                                      |                  | 
 |              | place_code       | 開催場所                                  |                  | 
 |              | weather          | 天気                                      |                  | 
@@ -56,6 +58,7 @@ jupyter labextension install @jupyter-widgets/jupyterlab-manager
     - [PythonによるnetkeibaのWebスクレイピング【レースIDの抽出】 | ジコログ](https://self-development.info/python%e3%81%ab%e3%82%88%e3%82%8bnetkeiba%e3%81%aeweb%e3%82%b9%e3%82%af%e3%83%ac%e3%82%a4%e3%83%94%e3%83%b3%e3%82%b0%e3%80%90%e3%83%ac%e3%83%bc%e3%82%b9id%e3%81%ae%e6%8a%bd%e5%87%ba%e3%80%91/)
     - [Pythonで競馬サイトWebスクレイピング - Qiita](https://qiita.com/Mokutan/items/89c871eac16b8142b5b2)
 - ランク学習
+    - [LightGBM でかんたん Learning to Rank - 霧でも食ってろ](https://knuu.github.io/ltr_by_lightgbm.html)
     - [機械学習で競馬必勝本に勝てるのか？ 〜Pythonで実装するランク学習〜 - エニグモ開発者ブログ](https://tech.enigmo.co.jp/entry/2020/12/09/100000)
     - [ランク学習でバーチャルスクリーニングする - tonetsの日記](https://tonets.hatenablog.com/entry/2019/12/23/135131)
     - [[競馬予想AI] ランク学習で着順予想するとなかなか強力だったお話｜とりまる｜note](https://note.com/dataij/n/n5a6d121b13ab?magazine_key=mfc655f2636e0)

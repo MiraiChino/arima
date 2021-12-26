@@ -83,7 +83,7 @@ def scrape_horses(race_id):
 COLUMNS = (
     "result", "gate", "horse_no", "name", "sex", "age", "penalty", "jockey",
     "time", "margin", "pop", "odds", "last3f", "corner", "barn", "weight",
-    "weight_change","race_name", "start_time", "field", "distance", "turn",
+    "weight_change", "race_name", "start_time", "field", "distance", "turn",
     "weather", "field_condition", "race_condition", "prize1", "prize2",
     "prize3", "prize4", "prize5", "year", "place_code", "hold_num", "day_num",
     "race_num", "race_date"

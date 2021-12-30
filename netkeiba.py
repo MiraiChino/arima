@@ -1,3 +1,5 @@
+import argparse
+import datetime
 import time
 import traceback
 from functools import wraps
@@ -10,6 +12,34 @@ import chrome
 import text
 
 BASE_URL = "https://race.netkeiba.com"
+COLUMNS = (
+    "result", "gate", "horse_no", "name", "sex", "age", "penalty", "jockey",
+    "time", "margin", "pop", "odds", "last3f", "corner", "barn", "weight",
+    "weight_change", "race_name", "start_time", "field", "distance", "turn",
+    "weather", "field_condition", "race_condition", "prize1", "prize2",
+    "prize3", "prize4", "prize5", "year", "place_code", "hold_num", "day_num",
+    "race_num", "race_date"
+)
+# 長さ:36
+# (16, 4, 8, 'ロイヤルパープル', '牡', 3, 56.0, 'マーフ',
+# '1:16.0', '3/4', 2, 3.1, 39.9, '13-13', '美浦加藤征', 516,
+# 2, '3歳未勝利', '10:55', 'ダ', 1200, '右',
+# '晴', '良', 'サラ系３歳未勝利', 510, 200,
+# 130, 77, 51, 2020, 6, 1, 1,
+# 3, '1月19日(日)')
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--from", dest="from_date", required=True, type=date_type,
+                        help="Example 2008-01. Cannot scrape before 2008-01")
+    parser.add_argument("--to", dest="to_date", required=True, type=date_type,
+                        help="Example 2022-01")
+    parser.add_argument("-o", "--out", dest="dbfile", required=True, type=str,
+                        help="Example netkeiba.sqlite. Database file for storing scraping result")
+    return parser.parse_args()
+
+def date_type(date_str):
+    return datetime.datetime.strptime(date_str, "%Y-%m")
 
 def scraping(func):
     @wraps(func)
@@ -24,9 +54,6 @@ def scraping(func):
 def soup(html):
     html.encoding = html.apparent_encoding
     return BeautifulSoup(html.text, 'html.parser')
-
-def race_url(race_id):
-    return f"{BASE_URL}/race/result.html?race_id={race_id}&rf=race_list"
 
 @scraping
 def scrape_racedates(year, month):
@@ -75,13 +102,6 @@ def scrape_results(race_id):
         result = text.extract_result(horse_html)
         if result.count(None) != len(result):
             yield *result, racename, *racedata11, *racedata12, *racedata2, *racedata3, racedate
-# 長さ:36
-# (16, 4, 8, 'ロイヤルパープル', '牡', 3, 56.0, 'マーフ',
-# '1:16.0', '3/4', 2, 3.1, 39.9, '13-13', '美浦加藤征', 516,
-# 2, '3歳未勝利', '10:55', 'ダ', 1200, '右',
-# '晴', '良', 'サラ系３歳未勝利', 510, 200,
-# 130, 77, 51, 2020, 6, 1, 1,
-# 3, '1月19日(日)')
 
 @scraping
 def scrape_shutuba(race_id):
@@ -100,27 +120,30 @@ def scrape_shutuba(race_id):
         if shutuba_horse.count(None) != len(shutuba_horse):
             yield *shutuba_horse, racename, *racedata11, *racedata12, *racedata2, *racedata3, racedate
 
-COLUMNS = (
-    "result", "gate", "horse_no", "name", "sex", "age", "penalty", "jockey",
-    "time", "margin", "pop", "odds", "last3f", "corner", "barn", "weight",
-    "weight_change", "race_name", "start_time", "field", "distance", "turn",
-    "weather", "field_condition", "race_condition", "prize1", "prize2",
-    "prize3", "prize4", "prize5", "year", "place_code", "hold_num", "day_num",
-    "race_num", "race_date"
-)
+def daterange(from_date, to_date):
+    if to_date < from_date:
+        return
+    for month in range(from_date.month, 12+1):
+        yield from_date.year, month
+    for year in range(from_date.year+1, to_date.year):
+        for month in range(1, 12):
+            yield year, month
+    if from_date.year < to_date.year:
+        for month in range(1, to_date.month+1):
+            yield to_date.year, month
 
 if __name__ == "__main__":
     import sqlite3
 
+    args = parse_args()
     with chrome.driver() as driver:
-        for year in range(2008, 2021+1):
-            for month in range(1, 12+1):
-                for race_date in scrape_racedates(year, month):
-                    horses = []
-                    for race_id in scrape_raceids(driver, race_date):
-                        for horse in scrape_results(race_id):
-                            horses.append(horse)
-                    with sqlite3.connect("netkeiba.sqlite") as conn:
-                        df = pd.DataFrame(horses, columns=COLUMNS)
-                        df.to_sql('horse', con=conn, if_exists='append')
-                    print(f"database: inserted race data in {year}-{month}-{race_date}")
+        for year, month in daterange(args.from_date, args.to_date):
+            for race_date in scrape_racedates(year, month):
+                horses = []
+                for race_id in scrape_raceids(driver, race_date):
+                    for horse in scrape_results(race_id):
+                        horses.append(horse)
+                with sqlite3.connect(args.dbfile) as conn:
+                    df = pd.DataFrame(horses, columns=COLUMNS)
+                    df.to_sql('horse', con=conn, if_exists='append')
+                print(f"database: inserted race data in {year}-{month}-{race_date}")

@@ -60,19 +60,21 @@ def scrape_raceids(driver, race_date):
                     yield race_id
 
 @scraping
-def scrape_horses(race_id):
+def scrape_results(race_id):
     race_url = f"{BASE_URL}/race/result.html?race_id={race_id}&rf=race_list"
     print(f"scraping: {race_url}")
     race_html = requests.get(race_url)
     s = soup(race_html)
     racename = text.remove_trash(s.find("div", class_="RaceName").text)
-    racedata1 = text.extract_racedata1(s.find("div", class_="RaceData01").text)
+    racedata11 = text.extract_racedata11(s.find("div", class_="RaceData01").text)
+    racedata12 = text.extract_racedata12(s.find("div", class_="RaceData01").text)
     racedata2 = text.extract_racedata2(s.find("div", class_="RaceData02"))
     racedata3 = text.extract_racedata3(race_id)
     racedate = s.find("dd", class_="Active").text
     for horse_html in s.find_all("tr",class_="HorseList"):
-        if horse := text.extract_horse(horse_html):
-            yield *horse, racename, *racedata1, *racedata2, *racedata3, racedate
+        result = text.extract_result(horse_html)
+        if result.count(None) != len(result):
+            yield *result, racename, *racedata11, *racedata12, *racedata2, *racedata3, racedate
 # 長さ:36
 # (16, 4, 8, 'ロイヤルパープル', '牡', 3, 56.0, 'マーフ',
 # '1:16.0', '3/4', 2, 3.1, 39.9, '13-13', '美浦加藤征', 516,
@@ -80,6 +82,25 @@ def scrape_horses(race_id):
 # '晴', '良', 'サラ系３歳未勝利', 510, 200,
 # 130, 77, 51, 2020, 6, 1, 1,
 # 3, '1月19日(日)')
+
+@scraping
+def scrape_shutuba(race_id):
+    shutuba_url = f"{BASE_URL}/race/shutuba.html?race_id={race_id}"
+    print(f"scraping: {shutuba_url}")
+    shutuba_html = requests.get(shutuba_url)
+    s = soup(shutuba_html)
+    result = []
+    racename = text.remove_trash(s.find("div", class_="RaceName").text)
+    racedata11 = text.extract_racedata11(s.find("div", class_="RaceData01").text)
+    racedata12 = text.extract_racedata12(s.find("div", class_="RaceData01").text)
+    racedata2 = text.extract_racedata2(s.find("div", class_="RaceData02"))
+    racedata3 = text.extract_racedata3(race_id)
+    racedate = s.find("dd", class_="Active").text
+    for horse_html in s.find_all("tr",class_="HorseList"):
+        shutuba_horse = text.extract_shutuba(horse_html)
+        if shutuba_horse.count(None) != len(shutuba_horse):
+            yield *shutuba_horse, racename, *racedata11, *racedata12, *racedata2, *racedata3, racedate
+
 COLUMNS = (
     "result", "gate", "horse_no", "name", "sex", "age", "penalty", "jockey",
     "time", "margin", "pop", "odds", "last3f", "corner", "barn", "weight",
@@ -98,7 +119,7 @@ if __name__ == "__main__":
                 for race_date in scrape_racedates(year, month):
                     horses = []
                     for race_id in scrape_raceids(driver, race_date):
-                        for horse in scrape_horses(race_id):
+                        for horse in scrape_results(race_id):
                             horses.append(horse)
                     with sqlite3.connect("netkeiba.sqlite") as conn:
                         df = pd.DataFrame(horses, columns=COLUMNS)

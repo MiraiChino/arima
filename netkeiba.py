@@ -89,7 +89,6 @@ def scrape_shutuba(race_id):
     print(f"scraping: {shutuba_url}")
     shutuba_html = requests.get(shutuba_url)
     s = soup(shutuba_html)
-    result = []
     racename = text.remove_trash(s.find("div", class_="RaceName").text)
     racedata11 = text.extract_racedata11(s.find("div", class_="RaceData01").text)
     racedata12 = text.extract_racedata12(s.find("div", class_="RaceData01").text)

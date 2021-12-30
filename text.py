@@ -92,6 +92,8 @@ def extract_shutuba(text):
             gate, horse_no = None, None
         sex, age =sa[:1], sa[1:]
         age = unicodedata.normalize("NFKC", age)
-        return gate, horse_no, name, sex, age, penalty, jockey, barn
+        return None, gate, horse_no, name, sex, age, penalty, jockey, \
+                None, None, None, None, None, None, barn, None, None
     except:
-        return None, None, None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None, \
+                None, None, None, None, None, None, None, None, None

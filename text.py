@@ -32,11 +32,15 @@ def extract_result(text):
         time, margin, pop, odds, last3f, corner, barn, w, _ = text.split(",")
     try:
         result, gate, horse_no = int(result), int(gate), int(horse_no)
-        sex, age =sa[:1], sa[1:]
+        sex, age = sa[:1], sa[1:]
         age = unicodedata.normalize("NFKC", age)
         penalty, pop, odds, last3f = float(penalty), int(pop), float(odds), float(last3f)
-        weight, weight_change = horse_weight.match(w).groups()
-        weight, weight_change = int(weight), int(weight_change)
+        if match := horse_weight.match(w):
+            weight, weight_change = match.groups()
+            weight, weight_change = int(weight), int(weight_change)
+        else:
+            weight = w
+            weight_change = 0
         return result, gate, horse_no, name, sex, age, penalty, jockey, \
                 time, margin, pop, odds, last3f, corner, barn, weight, weight_change
     except:

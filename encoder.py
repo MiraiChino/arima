@@ -5,7 +5,7 @@ import pandas as pd
 from sklearn.preprocessing import OrdinalEncoder
 
 
-class NetkeibaEncoder():
+class HorseEncoder():
 
     STR_COLUMNS = ["name", "sex", "jockey", "barn", "turn", "weather", "field", "field_condition", "race_condition", "race_name"]
 
@@ -13,7 +13,7 @@ class NetkeibaEncoder():
         self.encoder = OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)
 
     def fit(self, df):
-        self.encoder.fit(df[NetkeibaEncoder.STR_COLUMNS])
+        self.encoder.fit(df[HorseEncoder.STR_COLUMNS])
         return self
 
     def transform(self, df):
@@ -23,7 +23,8 @@ class NetkeibaEncoder():
         result["margin"] = encoded_margin(df)
         result["time"] = encoded_time(df["time"])
         result["prize"] = calc_prize(df)
-        result[NetkeibaEncoder.STR_COLUMNS] = self.encoder.transform(df[NetkeibaEncoder.STR_COLUMNS])
+        result["score"] = calc_score(df)
+        result[HorseEncoder.STR_COLUMNS] = self.encoder.transform(df[HorseEncoder.STR_COLUMNS])
         return result
 
     def fit_transform(self, df):
@@ -38,6 +39,15 @@ def to_seconds(x):
 
 def to_cos(x, max):
     return np.cos(math.radians(90 - (x / max)*360))
+
+def to_score(x):
+    no = x["result"]
+    if not no:
+        return None
+    if 1 <= no <= 5:
+        return [20, 8, 5, 3, 2][no-1]
+    else:
+        return 0
 
 def get_prize(x):
     no = x["result"]
@@ -116,17 +126,20 @@ def encoded_margin(df):
 def encoded_time(s_time):
     return s_time.apply(to_seconds)
 
+def calc_score(df):
+    return df.apply(to_score, axis="columns")
+
 if __name__ == "__main__":
     import netkeiba
     horses = [horse for horse in netkeiba.scrape_shutuba("202206010111")]
     df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
     df_format = format(df_original)
-    netkeiba_encoder = NetkeibaEncoder()
+    netkeiba_encoder = HorseEncoder()
     netkeiba_encoder.fit(df_format)
     df_encoded = netkeiba_encoder.transform(df_format)
     print(df_encoded.T)
 
-    horses = [horse for horse in netkeiba.scrape_shutuba("202106050811")]
+    horses = [horse for horse in netkeiba.scrape_results("202106050811")]
     df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
     df_format = format(df_original)
     df_encoded = netkeiba_encoder.transform(df_format)

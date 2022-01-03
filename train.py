@@ -1,5 +1,6 @@
 import pickle
 import sqlite3
+from collections import namedtuple
 
 import lightgbm as lgb
 import pandas as pd
@@ -26,7 +27,7 @@ def prepare_dataset(df, target, noneed_columns=NONEED_COLUMNS):
     dataset = Dataset(x, y, group=query)
     return dataset
 
-def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="netkeiba.encoder"):
+def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="netkeiba.encoder", params_file="netkeiba.params"):
     with sqlite3.connect(input_db) as conn:
         df_original = pd.read_sql_query("SELECT * FROM horse", conn)
     df_format = encoder.format(df_original)
@@ -58,9 +59,12 @@ def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="netkeiba.encode
         "horse_wc": ave("weight_change"),
         "horse_prize": ave("prize"),
     }
+    Params = namedtuple("Params",["ave_time", "hist_pattern", "feat_pattern"])
+    params = Params(ave_time, hist_pattern, feat_pattern)
+    with open(params_file, "wb") as f:
+        pickle.dump(params, f)
+
     with sqlite3.connect(output_db) as conn:
-        df_avetime = pd.DataFrame([{"key": k, "value": v} for k, v in ave_time.items()])
-        df_avetime.to_sql('avetime', con=conn, if_exists='replace')
         for name, hist_df in yield_history_aggdf(df_encoded, hist_pattern, feat_pattern):
             hist_df = hist_df.set_index("id")
             print("\r"+str(name),end="")

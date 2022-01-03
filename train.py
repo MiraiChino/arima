@@ -71,7 +71,12 @@ def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"
             hist_df.to_sql("horse", conn, if_exists="append", index_label="id")
 
 if __name__ == "__main__":
-    prepare("feature.sqlite")
+    prepare(
+        output_db="feature.sqlite", 
+        input_db="netkeiba.sqlite",
+        encoder_file="encoder.pickle",
+        params_file="params.pickle"
+    )
     with sqlite3.connect("feature.sqlite") as conn:
         df_feat = pd.read_sql_query("SELECT * FROM horse", conn).sort_values("id").reset_index()
 

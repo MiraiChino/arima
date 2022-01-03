@@ -52,8 +52,11 @@ def agg_history(funcs, hist_pattern, horse_history, index):
         past_rows = horse_history[:, index("race_date")] < row[index("race_date")]
         past_hist = horse_history[np.where(past_rows)][::-1]
         if past_hist.any():
-            last_jrace_fresult = np.array([f(past_hist[:j, :], row, index) for f in funcs for j in hist_pattern])
-            result.append(last_jrace_fresult)
+            try:
+                last_jrace_fresult = np.array([f(past_hist[:j, :], row, index) for f in funcs for j in hist_pattern])
+                result.append(last_jrace_fresult)
+            except:
+                result.append(no_hist)
         else:
             result.append(no_hist)
     return np.array(result)

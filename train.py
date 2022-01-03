@@ -6,7 +6,7 @@ import lightgbm as lgb
 import pandas as pd
 from lightgbm import Dataset
 
-import encoder
+from encoder import HorseEncoder
 from feature_extractor import (ave, calc_ave_time, diff, interval, same_count,
                                time, yield_history_aggdf)
 
@@ -30,12 +30,11 @@ def prepare_dataset(df, target, noneed_columns=NONEED_COLUMNS):
 def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle", params_file="params.pickle"):
     with sqlite3.connect(input_db) as conn:
         df_original = pd.read_sql_query("SELECT * FROM horse", conn)
-    df_format = encoder.format(df_original)
-    netkeiba_encoder = encoder.HorseEncoder()
-    netkeiba_encoder.fit(df_format)
-    df_encoded = netkeiba_encoder.transform(df_format)
+    horse_encoder = HorseEncoder()
+    df_format = horse_encoder.format(df_original)
+    df_encoded = horse_encoder.fit_transform(df_format)
     with open(encoder_file, "wb") as f:
-        pickle.dump(netkeiba_encoder, f)
+        pickle.dump(horse_encoder, f)
 
     ave_time = calc_ave_time(df_encoded)
     hist_pattern = [1, 2, 3, 4, 5, 10, 999999]

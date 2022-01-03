@@ -30,6 +30,15 @@ class HorseEncoder():
     def fit_transform(self, df):
         return self.fit(df).transform(df)
 
+    def format(self, df):
+        result = df.copy()
+        result["jockey"] = format_jockey(df["jockey"])
+        result["race_date"] = format_date(df["race_date"], df["year"])
+        result["corner3"] = format_corner3(df["corner"])
+        result["corner4"] = format_corner4(df["corner"])
+        result["race_condition"] = format_racecondition(df)
+        return result
+
 def to_seconds(x):
     if not x:
         return None
@@ -92,15 +101,6 @@ def format_racecondition(df):
     result = df["race_condition"].mask(mask_bad_rc, df["race_name"])
     return result
 
-def format(df):
-    result = df.copy()
-    result["jockey"] = format_jockey(df["jockey"])
-    result["race_date"] = format_date(df["race_date"], df["year"])
-    result["corner3"] = format_corner3(df["corner"])
-    result["corner4"] = format_corner4(df["corner"])
-    result["race_condition"] = format_racecondition(df)
-    return result
-
 def encode_racedate(s_racedate):
     return s_racedate.dt.dayofyear.apply(to_cos, max=365)
 
@@ -131,16 +131,15 @@ def calc_score(df):
 
 if __name__ == "__main__":
     import netkeiba
+    horse_encoder = HorseEncoder()
     horses = [horse for horse in netkeiba.scrape_shutuba("202206010111")]
     df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
-    df_format = format(df_original)
-    netkeiba_encoder = HorseEncoder()
-    netkeiba_encoder.fit(df_format)
-    df_encoded = netkeiba_encoder.transform(df_format)
+    df_format = horse_encoder.format(df_original)
+    df_encoded = horse_encoder.fit_transform(df_format)
     print(df_encoded.T)
 
     horses = [horse for horse in netkeiba.scrape_results("202106050811")]
     df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
-    df_format = format(df_original)
-    df_encoded = netkeiba_encoder.transform(df_format)
+    df_format = horse_encoder.format(df_original)
+    df_encoded = horse_encoder.transform(df_format)
     print(df_encoded.T)

@@ -37,14 +37,14 @@ def time(ave):
         return np.mean(times)
     return wrapper
 
-def yield_horse_history(a, name_index):
-    horse_names = np.unique(a[:, name_index])
-    for name in horse_names:
-        hist = a[np.where(a[:, name_index] == name)]
-        yield name, hist
+def extract_samevalue(a, target_index):
+    values = np.unique(a[:, target_index])
+    for value in values:
+        extracted_nparray = a[np.where(a[:, target_index] == value)]
+        yield value, extracted_nparray
 
-def X_result(funcs, X, horse_history, index):
-    no_hist = np.empty((len(funcs)*len(X),))
+def agg_history(funcs, hist_pattern, horse_history, index):
+    no_hist = np.empty((len(funcs)*len(hist_pattern),))
     no_hist[:] = np.nan
     result = []
     for i in range(0, len(horse_history)):
@@ -52,21 +52,40 @@ def X_result(funcs, X, horse_history, index):
         past_rows = horse_history[:, index("race_date")] < row[index("race_date")]
         past_hist = horse_history[np.where(past_rows)][::-1]
         if past_hist.any():
-            last_jrace_fresult = np.array([f(past_hist[:j, :], row, index) for f in funcs for j in X])
+            last_jrace_fresult = np.array([f(past_hist[:j, :], row, index) for f in funcs for j in hist_pattern])
             result.append(last_jrace_fresult)
         else:
             result.append(no_hist)
     return np.array(result)
 
-def yield_calculated(df, hist_pattern, feat_pattern):
+def df2np(df):
     a = df.values
     columns = df.columns.tolist()
     index = lambda x: columns.index(x)
-    funcs = list(feat_pattern.values())
+    return a, columns, index
 
-    for name, hist in yield_horse_history(a, index("name")):
-        np_df = X_result(funcs, hist_pattern, hist, index)
-        past_columns = [f"{col}_{x}" for col in list(feat_pattern.keys()) for x in hist_pattern]
-        hist_df = pd.DataFrame(np.concatenate([hist, np_df], axis=1), columns=columns+past_columns)
-        hist_df = hist_df.set_index("id")
+def yield_history_aggdf(df, hist_pattern, feat_pattern):
+    funcs = list(feat_pattern.values())
+    past_columns = [f"{col}_{x}" for col in list(feat_pattern.keys()) for x in hist_pattern]
+    a, columns, index = df2np(df)
+
+    for name, hist in extract_samevalue(a, target_index=index("name")):
+        a_agghist = agg_history(funcs, hist_pattern, hist, index)
+        hist_df = pd.DataFrame(np.concatenate([hist, a_agghist], axis=1), columns=columns+past_columns)
         yield name, hist_df
+
+def search_history(name, df_encoded, hist_pattern, feat_pattern, feature_db):
+    funcs = list(feat_pattern.values())
+    past_columns = [f"{col}_{x}" for col in list(feat_pattern.keys()) for x in hist_pattern]
+
+    hist = pd.read_sql_query(f"SELECT * FROM horse WHERE name=={name}", feature_db)
+    hist["race_date"] = pd.to_datetime(hist["race_date"])
+    hist = hist.loc[:, :'corner4']
+
+    row_target = df_encoded[df_encoded["name"] == name]
+    hist = pd.concat([hist, row_target])
+    a, columns, index = df2np(hist)
+    a_agghist = agg_history(funcs, hist_pattern, a, index)
+    hist_df = pd.DataFrame(np.concatenate([hist, a_agghist], axis=1), columns=columns+past_columns)
+    hist_df = hist_df.set_index("id")
+    return hist_df

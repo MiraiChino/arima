@@ -27,7 +27,7 @@ def prepare_dataset(df, target, noneed_columns=NONEED_COLUMNS):
     dataset = Dataset(x, y, group=query)
     return dataset
 
-def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="netkeiba.encoder", params_file="netkeiba.params"):
+def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle", params_file="params.pickle"):
     with sqlite3.connect(input_db) as conn:
         df_original = pd.read_sql_query("SELECT * FROM horse", conn)
     df_format = encoder.format(df_original)
@@ -97,7 +97,7 @@ if __name__ == "__main__":
         valid_sets=valid,
         callbacks=callbacks,
     )
-    with open("rank.model", "wb") as f:
+    with open("rank_model.pickle", "wb") as f:
         pickle.dump(rank_model, f)
 
     train = prepare_dataset(df_feat.query("'2008-01-01' <= race_date <= '2017-12-31'"), target="prize")
@@ -116,5 +116,5 @@ if __name__ == "__main__":
         valid_sets=valid,
         callbacks=callbacks,
     )
-    with open("reg.model", "wb") as f:
+    with open("reg_model.pickle", "wb") as f:
         pickle.dump(reg_model, f)

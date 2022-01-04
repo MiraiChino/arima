@@ -85,14 +85,20 @@ def format_corner(s_corner):
 def format_corner3(s_corner):
     df_corner34 = format_corner(s_corner)
     if len(df_corner34.columns) == 2:
-        return df_corner34[0].astype(float)
+        corner3 = df_corner34[0]
+        corner3 = corner3.mask(corner3 == '', np.nan)
+        corner3 = corner3.mask(corner3 == None, np.nan)
+        return corner3.astype(float)
     else:
         return None
 
 def format_corner4(s_corner):
     df_corner34 = format_corner(s_corner)
     if len(df_corner34.columns) == 2:
-        return df_corner34[1].astype(float)
+        corner4 = df_corner34[1]
+        corner4 = corner4.mask(corner4 == '', np.nan)
+        corner4 = corner4.mask(corner4 == None, np.nan)
+        return corner4.astype(float)
     else:
         return None
 

@@ -33,7 +33,7 @@ def extract_result(text):
     try:
         result, gate, horse_no = int(result), int(gate), int(horse_no)
         sex, age = sa[:1], sa[1:]
-        age = unicodedata.normalize("NFKC", age)
+        age = int(unicodedata.normalize("NFKC", age))
         penalty, pop, odds, last3f = float(penalty), int(pop), float(odds), float(last3f)
         if match := horse_weight.match(w):
             weight, weight_change = match.groups()

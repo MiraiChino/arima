@@ -1,27 +1,20 @@
-import pickle
 import sqlite3
-from collections import namedtuple
 
+import dill as pickle
 import lightgbm as lgb
 import pandas as pd
 from lightgbm import Dataset
 
+import feature_params
 from encoder import HorseEncoder
 from feature_extractor import (ave, calc_ave_time, diff, interval, same_count,
                                time, yield_history_aggdf)
 
-NONEED_COLUMNS = [
-    "index", "id", "result", "time", "margin", "pop", "odds", "last3f", \
-    "weight", "weight_change", "corner", "corner3", "corner4", \
-    "year", "hold_num", "race_num", "day_num", "race_date", "race_name", \
-    "start_time", "prize1", "prize2", "prize3", "prize4", "prize5", "prize", "score"
-]
-RACE_CULMNS = ["year", "place_code", "hold_num", "day_num", "race_num"]
 
-def prepare_dataset(df, target, noneed_columns=NONEED_COLUMNS):
+def prepare_dataset(df, target, noneed_columns=feature_params.NONEED_COLUMNS):
     if target in noneed_columns:
         noneed_columns.remove(target)
-    query = df.groupby(RACE_CULMNS)["name"].count().values.tolist()
+    query = df.groupby(feature_params.RACE_CULMNS)["name"].count().values.tolist()
     x = df.drop(columns=noneed_columns)
     y = x.pop(target)
     dataset = Dataset(x, y, group=query)
@@ -58,16 +51,14 @@ def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"
         "horse_wc": ave("weight_change"),
         "horse_prize": ave("prize"),
     }
-    Params = namedtuple("Params",["ave_time", "hist_pattern", "feat_pattern"])
-    params = Params(ave_time, hist_pattern, feat_pattern)
+    params = feature_params.Params(ave_time, hist_pattern, feat_pattern)
     with open(params_file, "wb") as f:
         pickle.dump(params, f)
 
     with sqlite3.connect(output_db) as conn:
         for name, hist_df in yield_history_aggdf(df_encoded, hist_pattern, feat_pattern):
-            hist_df = hist_df.set_index("id")
             print("\r"+str(name),end="")
-            hist_df.to_sql("horse", conn, if_exists="append", index_label="id")
+            hist_df.to_sql("horse", conn, if_exists="append", index=False)
 
 if __name__ == "__main__":
     prepare(
@@ -77,8 +68,7 @@ if __name__ == "__main__":
         params_file="params.pickle"
     )
     with sqlite3.connect("feature.sqlite") as conn:
-        df_feat = pd.read_sql_query("SELECT * FROM horse", conn).sort_values("id").reset_index()
-
+        df_feat = pd.read_sql_query("SELECT * FROM horse", conn).sort_values("index").reset_index()
     train = prepare_dataset(df_feat.query("'2008-01-01' <= race_date <= '2017-12-31'"), target="score")
     valid = prepare_dataset(df_feat.query("'2018-01-01' <= race_date <= '2020-12-31'"), target="score")
     test = prepare_dataset(df_feat.query("'2021-01-01' <= race_date <= '2021-12-31'"), target="score")
@@ -90,16 +80,15 @@ if __name__ == "__main__":
         "boosting_type": "gbdt",
         "learning_rate": 0.01,
     }
-    callbacks = [
-        lgb.log_evaluation(10),
-        lgb.early_stopping(50),
-    ]
     rank_model = lgb.train(
         lgb_params,
         train,
         num_boost_round=10000,
         valid_sets=valid,
-        callbacks=callbacks,
+        callbacks=[
+            lgb.log_evaluation(10),
+            lgb.early_stopping(50),
+        ],
     )
     with open("rank_model.pickle", "wb") as f:
         pickle.dump(rank_model, f)
@@ -118,7 +107,10 @@ if __name__ == "__main__":
         train,
         num_boost_round=10000,
         valid_sets=valid,
-        callbacks=callbacks,
+        callbacks=[
+            lgb.log_evaluation(10),
+            lgb.early_stopping(50),
+        ],
     )
     with open("reg_model.pickle", "wb") as f:
         pickle.dump(reg_model, f)

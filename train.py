@@ -23,6 +23,8 @@ def prepare_dataset(df, target, noneed_columns=feature_params.NONEED_COLUMNS):
 def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle", params_file="params.pickle"):
     with sqlite3.connect(input_db) as conn:
         df_original = pd.read_sql_query("SELECT * FROM horse", conn)
+        if "index" in df_original.columns:
+            df_original = df_original.drop(columns="index")
     horse_encoder = HorseEncoder()
     df_format = horse_encoder.format(df_original)
     df_encoded = horse_encoder.fit_transform(df_format)
@@ -58,7 +60,7 @@ def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"
     with sqlite3.connect(output_db) as conn:
         for name, hist_df in yield_history_aggdf(df_encoded, hist_pattern, feat_pattern):
             print("\r"+str(name),end="")
-            hist_df.to_sql("horse", conn, if_exists="append", index=False)
+            hist_df.to_sql("horse", conn, if_exists="append")
 
 if __name__ == "__main__":
     prepare(

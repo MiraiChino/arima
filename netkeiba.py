@@ -145,5 +145,5 @@ if __name__ == "__main__":
                         horses.append(horse)
                 with sqlite3.connect(args.dbfile) as conn:
                     df = pd.DataFrame(horses, columns=COLUMNS)
-                    df.to_sql('horse', con=conn, if_exists='append')
+                    df.to_sql('horse', con=conn, if_exists='append', index=False)
                 print(f"database: inserted race data in {year}-{month}-{race_date}")

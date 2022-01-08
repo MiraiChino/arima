@@ -52,7 +52,7 @@ if __name__ == "__main__":
         valid_sets=valid,
         callbacks=[
             lgb.log_evaluation(10),
-            lgb.early_stopping(50),
+            lgb.early_stopping(50, first_metric_only=True),
         ],
     )
     with open(args.rank_file, "wb") as f:

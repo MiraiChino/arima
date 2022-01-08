@@ -3,6 +3,8 @@ import unicodedata
 
 newline = re.compile(r"\n")
 blank = re.compile(r" ")
+li = re.compile(r"</li>")
+tr = re.compile(r"</tr>")
 td = re.compile(r"</td>")
 tag = re.compile(r"<[^>]*?>")
 bracket_l = re.compile(r"\[")
@@ -101,3 +103,18 @@ def extract_shutuba(text):
     except:
         return None, None, None, None, None, None, None, None, \
                 None, None, None, None, None, None, None, None, None
+
+def extract_odds(text):
+    text = remove_trash(text)
+    text = tr.sub("@" ,text)
+    text = td.sub("," ,text)
+    text = li.sub("-" ,text)
+    text = tag.sub("", text)
+    text = bracket_l.sub("", text)
+    text = bracket_r.sub("", text)
+    results = text.split("@")[1:-1]
+    results = [row.split(",") for row in results]
+    return results
+
+def split_rentan(text):
+    return tuple(int(n) for n in text[:-1].split("--"))

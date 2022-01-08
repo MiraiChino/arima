@@ -66,7 +66,7 @@ def scrape_raceids(driver, race_date):
     racelist_url = f"{BASE_URL}/top/race_list.html?kaisai_date={race_date}"
     print(f"scraping: {racelist_url}")
     driver.get(racelist_url)
-    if element := chrome.wait_element("RaceTopRace", driver):
+    if chrome.wait_element("RaceTopRace", driver):
         racelist_text = driver.page_source
         races = BeautifulSoup(racelist_text, 'html.parser').find_all("li", class_="RaceList_DataItem")
         for race in races:
@@ -110,6 +110,46 @@ def scrape_shutuba(race_id):
         shutuba_horse = text.extract_shutuba(horse_html)
         if shutuba_horse.count(None) != len(shutuba_horse):
             yield *shutuba_horse, racename, *racedata11, *racedata12, *racedata2, *racedata3, racedate
+
+@scraping
+def scrape_odds(driver, odds_url):
+    print(f"scraping: {odds_url}")
+    driver.get(odds_url)
+    if chrome.wait_all_elements():
+        odds_text = driver.page_source
+        tables = BeautifulSoup(odds_text, 'html.parser').find_all("table", class_="RaceOdds_HorseList_Table")
+        odds_list = text.extract_odds(tables[0])
+        return odds_list
+
+def scrape_tanshou(driver):
+    tanshou_url = f"{BASE_URL}/odds/index.html?race_id={race_id}"
+    odds_list = scrape_odds(driver, tanshou_url)
+    tanshou_odds = {int(no): float(odds) for pop, waku, no, _, name, odds, huku, _ in odds_list}
+    return tanshou_odds
+
+def scrape_umatan(driver):
+    umatan_url = f"{BASE_URL}/odds/index.html?type=b6&race_id={race_id}&housiki=c99"
+    odds_list = scrape_odds(driver, umatan_url)
+    umatan_odds = {text.split_rentan(niren): float(odds) for pop, _, niren, odds, *_ in odds_list[1:]}
+    return umatan_odds
+
+def scrape_umaren(driver):
+    umaren_url = f"{BASE_URL}/odds/index.html?type=b4&race_id={race_id}&housiki=c99"
+    odds_list = scrape_odds(driver, umaren_url)
+    umaren_odds = {text.split_rentan(niren): float(odds) for pop, _, niren, odds, *_ in odds_list[1:]}
+    return umaren_odds
+
+def scrape_sanrentan(driver):
+    sanrentan_url = f"{BASE_URL}/odds/index.html?type=b8&race_id={race_id}&housiki=c99"
+    odds_list = scrape_odds(driver, sanrentan_url)
+    sanrentan_odds = {text.split_rentan(sanren): float(odds) for pop, _, sanren, odds, *_ in odds_list[1:]}
+    return sanrentan_odds
+
+def scrape_sanrenpuku(driver):
+    sanrenpuku_url = f"{BASE_URL}/odds/index.html?type=b7&race_id={race_id}&housiki=c99"
+    odds_list = scrape_odds(driver, sanrenpuku_url)
+    sanrenpuku_odds = {text.split_rentan(sanren): float(odds) for pop, _, sanren, odds, *_ in odds_list[1:]}
+    return sanrenpuku_odds
 
 def daterange(from_date, to_date):
     from_date = date_type(from_date)

@@ -24,3 +24,8 @@ def wait_element(element_id, driver, timeout=10):
     return WebDriverWait(driver, timeout).until(
         EC.presence_of_element_located((By.ID, element_id))
     )
+
+def wait_all_elements(driver, timeout=10):
+    return WebDriverWait(driver, timeout).until(
+        EC.presence_of_all_elements_located
+    )

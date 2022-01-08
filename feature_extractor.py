@@ -157,7 +157,7 @@ def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"
         hist_df_list.append(hist_df)
     df_feat = pd.concat(hist_df_list)
     df_feat = df_feat.sort_values("id").reset_index()
-    df_feat = pd.concat([df.sort_values("horse_no") for _, df in df_feat.groupby(feature_params.RACE_CULMNS)])
+    df_feat = pd.concat([df.sort_values("horse_no") for _, df in df_feat.groupby(feature_params.RACE_COLUMNS)])
     with sqlite3.connect(output_db) as conn:
         df_feat.to_sql("horse", conn, if_exists="replace", index=False)
 

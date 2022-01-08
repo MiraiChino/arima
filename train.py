@@ -22,7 +22,7 @@ def parse_args():
 def prepare_dataset(df, target, noneed_columns=feature_params.NONEED_COLUMNS):
     if target in noneed_columns:
         noneed_columns.remove(target)
-    query = df.groupby(feature_params.RACE_CULMNS)["name"].count().values.tolist()
+    query = df.groupby(feature_params.RACE_COLUMNS)["name"].count().values.tolist()
     x = df.drop(columns=noneed_columns)
     y = x.pop(target)
     dataset = Dataset(x, y, group=query)

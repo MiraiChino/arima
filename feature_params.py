@@ -7,7 +7,7 @@ NONEED_COLUMNS = [
     "year", "hold_num", "race_num", "day_num", "race_date", "race_name", \
     "start_time", "prize1", "prize2", "prize3", "prize4", "prize5", "prize", "score"
 ]
-RACE_CULMNS = ["year", "place_code", "hold_num", "day_num", "race_num"]
+RACE_COLUMNS = ["year", "place_code", "hold_num", "day_num", "race_num"]
 
 @dataclass
 class Params:

@@ -16,7 +16,7 @@ import netkeiba
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--raceid", dest="race_id", required=True, type=int,
+    parser.add_argument("--raceid", dest="race_id", required=True, type=str,
                         help="Example 202206010111.")
     return parser.parse_args()
 
@@ -144,9 +144,7 @@ def predict_baken_prob(prob):
 
 if __name__ == "__main__":
     args = parse_args()
-    race_id = str(args.race_id)
-    
-    horses = [horse for horse in netkeiba.scrape_shutuba(race_id)]
+    horses = [horse for horse in netkeiba.scrape_shutuba(args.race_id)]
     df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
     result_prob = predict_result_prob(df_original)
     baken = predict_baken_prob(result_prob)

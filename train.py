@@ -41,7 +41,7 @@ if __name__ == "__main__":
         "objective": "lambdarank",
         "metric": "ndcg",
         "lambdarank_truncation_level": 10,
-        "ndcg_eval_at": [5, 4, 3, 2, 1],
+        "ndcg_eval_at": [3, 5],
         "boosting_type": "gbdt",
         "learning_rate": 0.01,
     }
@@ -52,7 +52,7 @@ if __name__ == "__main__":
         valid_sets=valid,
         callbacks=[
             lgb.log_evaluation(10),
-            lgb.early_stopping(50, first_metric_only=True),
+            lgb.early_stopping(50),
         ],
     )
     with open(args.rank_file, "wb") as f:

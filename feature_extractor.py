@@ -30,12 +30,13 @@ def diff(column):
 def calc_ave_time(df):
     return {key: race["time"].mean() for key, race in df.groupby(["field", "distance", "field_condition"])}
 
-def average_time(time, f, d, fc, ave):
-    a = ave[(f, d, fc)]
-    return (time - a) / a
+
 
 def time(ave):
     def wrapper(history, now, index):
+        def average_time(time, f, d, fc, ave):
+            a = ave[(f, d, fc)]
+            return (time - a) / a
         ht = history[:, index("time")]
         hf = history[:, index("field")]
         hd = history[:, index("distance")]
@@ -62,7 +63,8 @@ def agg_history(funcs, hist_pattern, horse_history, index):
             try:
                 last_jrace_fresult = np.array([f(past_hist[:j, :], row, index) for f in funcs for j in hist_pattern])
                 result.append(last_jrace_fresult)
-            except:
+            except Exception as e:
+                print(e)
                 result.append(no_hist)
         else:
             result.append(no_hist)
@@ -90,15 +92,19 @@ def search_history(name, df_encoded, hist_pattern, feat_pattern, feature_db):
 
     hist = pd.read_sql_query(f"SELECT * FROM horse WHERE name=={name}", feature_db)
     hist["race_date"] = pd.to_datetime(hist["race_date"])
-    hist = hist.loc[:, :'corner4']
+    hist = hist.sort_values("race_date")
+    hist = hist.loc[:, :'score']
 
     row_target = df_encoded[df_encoded["name"] == name]
+    if "id" not in row_target.columns:
+        row_target["id"] = None
+    if "index" not in row_target.columns:
+        row_target["index"] = None
     hist = pd.concat([hist, row_target])
     a, columns, index = df2np(hist)
     a_agghist = agg_history(funcs, hist_pattern, a, index)
     hist_df = pd.DataFrame(np.concatenate([hist, a_agghist], axis=1), columns=columns+past_columns)
-    hist_df = hist_df.set_index("id")
-    return hist_df
+    return hist_df.tail(1)
 
 def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle", params_file="params.pickle"):
     with sqlite3.connect(input_db) as conn:

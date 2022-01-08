@@ -1,4 +1,3 @@
-import argparse
 import sqlite3
 
 import dill as pickle
@@ -6,18 +5,9 @@ import lightgbm as lgb
 import pandas as pd
 from lightgbm import Dataset
 
+import config
 import feature_params
 
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--featdb", dest="feat_db", required=True, type=str,
-                        help="Example feature.sqlite")
-    parser.add_argument("--outrank", dest="rank_file", required=True, type=str,
-                        help="Example rank_model.pickle")
-    parser.add_argument("--outreg", dest="reg_file", required=True, type=str,
-                        help="Example reg_model.pickle")
-    return parser.parse_args()
 
 def prepare_dataset(df, target, noneed_columns=feature_params.NONEED_COLUMNS):
     if target in noneed_columns:
@@ -29,24 +19,16 @@ def prepare_dataset(df, target, noneed_columns=feature_params.NONEED_COLUMNS):
     return dataset
 
 if __name__ == "__main__":
-    args = parse_args()
-    with sqlite3.connect(args.feat_db) as conn:
+    with sqlite3.connect(config.feat_db) as conn:
         df_feat = pd.read_sql_query("SELECT * FROM horse", conn)
     print(df_feat.head().T)
     print(df_feat.tail().T)
-    train = prepare_dataset(df_feat.query("'2008-01-01' <= race_date <= '2017-12-31'"), target="score")
-    valid = prepare_dataset(df_feat.query("'2018-01-01' <= race_date <= '2020-12-31'"), target="score")
-    test = prepare_dataset(df_feat.query("'2021-01-01' <= race_date <= '2021-12-31'"), target="score")
-    lgb_params = {
-        "objective": "lambdarank",
-        "metric": "ndcg",
-        "lambdarank_truncation_level": 10,
-        "ndcg_eval_at": [3, 5],
-        "boosting_type": "gbdt",
-        "learning_rate": 0.01,
-    }
+    train = prepare_dataset(df_feat.query(config.train_query), target=config.rank_target)
+    valid = prepare_dataset(df_feat.query(config.valid_query), target=config.rank_target)
+    test = prepare_dataset(df_feat.query(config.test_query), target=config.rank_target)
+
     rank_model = lgb.train(
-        lgb_params,
+        config.rank_params,
         train,
         num_boost_round=10000,
         valid_sets=valid,
@@ -55,20 +37,15 @@ if __name__ == "__main__":
             lgb.early_stopping(50, first_metric_only=True),
         ],
     )
-    with open(args.rank_file, "wb") as f:
+    with open(config.rank_file, "wb") as f:
         pickle.dump(rank_model, f)
 
-    train = prepare_dataset(df_feat.query("'2008-01-01' <= race_date <= '2017-12-31'"), target="prize")
-    valid = prepare_dataset(df_feat.query("'2018-01-01' <= race_date <= '2020-12-31'"), target="prize")
-    test = prepare_dataset(df_feat.query("'2021-01-01' <= race_date <= '2021-12-31'"), target="prize")
-    lgb_params = {
-        'objective': 'regression',
-        'boosting_type': 'gbdt',
-        'metric': 'rmse',
-        'learning_rate': 0.01
-    }
+    train = prepare_dataset(df_feat.query(config.train_query), target=config.reg_target)
+    valid = prepare_dataset(df_feat.query(config.valid_query), target=config.reg_target)
+    test = prepare_dataset(df_feat.query(config.test_query), target=config.reg_target)
+
     reg_model = lgb.train(
-        lgb_params,
+        config.reg_params,
         train,
         num_boost_round=10000,
         valid_sets=valid,
@@ -77,5 +54,5 @@ if __name__ == "__main__":
             lgb.early_stopping(50),
         ],
     )
-    with open(args.reg_file, "wb") as f:
+    with open(config.reg_file, "wb") as f:
         pickle.dump(reg_model, f)

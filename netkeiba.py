@@ -1,5 +1,5 @@
-import argparse
 import datetime
+import sqlite3
 import time
 import traceback
 from functools import wraps
@@ -9,6 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 
 import chrome
+import config
 import text
 
 BASE_URL = "https://race.netkeiba.com"
@@ -27,16 +28,6 @@ COLUMNS = (
 # '晴', '良', 'サラ系３歳未勝利', 510, 200,
 # 130, 77, 51, 2020, 6, 1, 1,
 # 3, '1月19日(日)')
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--from", dest="from_date", required=True, type=date_type,
-                        help="Example 2008-01. Cannot scrape before 2008-01")
-    parser.add_argument("--to", dest="to_date", required=True, type=date_type,
-                        help="Example 2022-01")
-    parser.add_argument("-o", "--out", dest="dbfile", required=True, type=str,
-                        help="Example netkeiba.sqlite. Database file for storing scraping result")
-    return parser.parse_args()
 
 def date_type(date_str):
     return datetime.datetime.strptime(date_str, "%Y-%m")
@@ -121,6 +112,8 @@ def scrape_shutuba(race_id):
             yield *shutuba_horse, racename, *racedata11, *racedata12, *racedata2, *racedata3, racedate
 
 def daterange(from_date, to_date):
+    from_date = date_type(from_date)
+    to_date = date_type(to_date)
     if to_date < from_date:
         return
     for month in range(from_date.month, 12+1):
@@ -133,17 +126,14 @@ def daterange(from_date, to_date):
             yield to_date.year, month
 
 if __name__ == "__main__":
-    import sqlite3
-
-    args = parse_args()
     with chrome.driver() as driver:
-        for year, month in daterange(args.from_date, args.to_date):
+        for year, month in daterange(config.from_date, config.to_date):
             horses = []
             for race_date in scrape_racedates(year, month):
                 for race_id in scrape_raceids(driver, race_date):
                     for horse in scrape_results(race_id):
                         horses.append(horse)
-            with sqlite3.connect(args.dbfile) as conn:
+            with sqlite3.connect(config.netkeiba_db) as conn:
                 df = pd.DataFrame(horses, columns=COLUMNS)
                 df.to_sql('horse', con=conn, if_exists='append', index=False)
             print(f"database: inserted race data in {year}-{month}")

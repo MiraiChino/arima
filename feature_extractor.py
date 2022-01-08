@@ -1,25 +1,13 @@
-import argparse
 import sqlite3
 
 import dill as pickle
 import numpy as np
 import pandas as pd
 
+import config
 import feature_params
 from encoder import HorseEncoder
 
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--indb", dest="input_db", required=True, type=str,
-                        help="Example netkeiba.sqlite")
-    parser.add_argument("--outdb", dest="output_db", required=True, type=str,
-                        help="Example feature.sqlite")
-    parser.add_argument("--outencoder", dest="encoder_file", required=True, type=str,
-                        help="Example encoder.pickle")
-    parser.add_argument("--outparams", dest="params_file", required=True, type=str,
-                        help="Example params.pickle")
-    return parser.parse_args()
 
 def ave(column):
     def wrapper(history, now, index):
@@ -162,10 +150,9 @@ def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"
         df_feat.to_sql("horse", conn, if_exists="replace", index=False)
 
 if __name__ == "__main__":
-    args = parse_args()
     prepare(
-        output_db=args.output_db, 
-        input_db=args.input_db, 
-        encoder_file=args.encoder_file, 
-        params_file=args.params_file,
+        output_db=config.feat_db, 
+        input_db=config.netkeiba_db, 
+        encoder_file=config.encoder_file, 
+        params_file=config.params_file,
     )

@@ -138,12 +138,12 @@ if __name__ == "__main__":
     args = parse_args()
     with chrome.driver() as driver:
         for year, month in daterange(args.from_date, args.to_date):
+            horses = []
             for race_date in scrape_racedates(year, month):
-                horses = []
                 for race_id in scrape_raceids(driver, race_date):
                     for horse in scrape_results(race_id):
                         horses.append(horse)
-                with sqlite3.connect(args.dbfile) as conn:
-                    df = pd.DataFrame(horses, columns=COLUMNS)
-                    df.to_sql('horse', con=conn, if_exists='append', index=False)
-                print(f"database: inserted race data in {year}-{month}-{race_date}")
+            with sqlite3.connect(args.dbfile) as conn:
+                df = pd.DataFrame(horses, columns=COLUMNS)
+                df.to_sql('horse', con=conn, if_exists='append', index=False)
+            print(f"database: inserted race data in {year}-{month}")

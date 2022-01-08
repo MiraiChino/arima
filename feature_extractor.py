@@ -15,9 +15,9 @@ def parse_args():
                         help="Example netkeiba.sqlite")
     parser.add_argument("--outdb", dest="output_db", required=True, type=str,
                         help="Example feature.sqlite")
-    parser.add_argument("-outencoder", dest="encoder_file", required=True, type=str,
+    parser.add_argument("--outencoder", dest="encoder_file", required=True, type=str,
                         help="Example encoder.pickle")
-    parser.add_argument("-outparams", dest="params_file", required=True, type=str,
+    parser.add_argument("--outparams", dest="params_file", required=True, type=str,
                         help="Example params.pickle")
     return parser.parse_args()
 
@@ -155,7 +155,8 @@ def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"
     for name, hist_df in yield_history_aggdf(df_encoded, hist_pattern, feat_pattern):
         print("\r"+str(name),end="")
         hist_df_list.append(hist_df)
-    df_feat = pd.concat(hist_df_list).sort_values("id").reset_index()
+    df_feat = pd.concat(hist_df_list)
+    df_feat = df_feat.sort_values("id").reset_index()
     df_feat = pd.concat([df.sort_values("horse_no") for _, df in df_feat.groupby(feature_params.RACE_CULMNS)])
     with sqlite3.connect(output_db) as conn:
         df_feat.to_sql("horse", conn, if_exists="replace", index=False)

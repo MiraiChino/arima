@@ -119,7 +119,7 @@ def daterange(from_date, to_date):
     for month in range(from_date.month, 12+1):
         yield from_date.year, month
     for year in range(from_date.year+1, to_date.year):
-        for month in range(1, 12):
+        for month in range(1, 12+1):
             yield year, month
     if from_date.year < to_date.year:
         for month in range(1, to_date.month+1):

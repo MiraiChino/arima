@@ -3,7 +3,7 @@
 ## TODO
 - [x] レースIDから出走情報をスクレイピングする
 - [x] スクレイピングした出走情報の特徴量をつくってモデルに入れられるようにする
-- [ ] train
+- [x] train
 - [ ] predict
 - [ ] lambdaで外部からアクセスできるWebページをつくる
 - [ ] ランクと回帰の重みづけを考える
@@ -17,6 +17,9 @@
 
 ## 過去のレース情報をスクレイピングしてDBに保存
 - `python netkeiba.py --from 2008-01 --to 2021-12 --out netkeiba.sqlite`
+
+## 特徴量などを前処理してDBに保存
+- `python feature_extractor.py --indb netkeiba.sqlite --outdb feature.sqlite --outencoder encoder.pickle --outparams params.pickle `
 
 ## 使用データ
 - [netkeiba.com](https://race.netkeiba.com/top/?rf=navi)からスクレイピングしたデータ

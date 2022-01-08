@@ -1,6 +1,25 @@
+import argparse
+import sqlite3
+
+import dill as pickle
 import numpy as np
 import pandas as pd
 
+import feature_params
+from encoder import HorseEncoder
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--indb", dest="input_db", required=True, type=str,
+                        help="Example netkeiba.sqlite")
+    parser.add_argument("--outdb", dest="output_db", required=True, type=str,
+                        help="Example feature.sqlite")
+    parser.add_argument("-outencoder", dest="encoder_file", required=True, type=str,
+                        help="Example encoder.pickle")
+    parser.add_argument("-outparams", dest="params_file", required=True, type=str,
+                        help="Example params.pickle")
+    return parser.parse_args()
 
 def ave(column):
     def wrapper(history, now, index):
@@ -92,3 +111,60 @@ def search_history(name, df_encoded, hist_pattern, feat_pattern, feature_db):
     hist_df = pd.DataFrame(np.concatenate([hist, a_agghist], axis=1), columns=columns+past_columns)
     hist_df = hist_df.set_index("id")
     return hist_df
+
+def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle", params_file="params.pickle"):
+    with sqlite3.connect(input_db) as conn:
+        df_original = pd.read_sql_query("SELECT * FROM horse", conn)
+        if "index" in df_original.columns:
+            df_original = df_original.drop(columns="index")
+        df_original["id"] = df_original.index
+        
+    horse_encoder = HorseEncoder()
+    df_format = horse_encoder.format(df_original)
+    df_encoded = horse_encoder.fit_transform(df_format)
+    with open(encoder_file, "wb") as f:
+        pickle.dump(horse_encoder, f)
+
+    ave_time = calc_ave_time(df_encoded)
+    hist_pattern = [1, 2, 3, 4, 5, 10, 999999]
+    feat_pattern = {
+        "horse_interval": interval,
+        "horse_place": same_count("place_code"),
+        "horse_odds": ave("odds"),
+        "horse_pop": ave("pop"),
+        "horse_result": ave("result"),
+        "horse_jockey": same_count("jockey"),
+        "horse_penalty": ave("penalty"),
+        "horse_distance": diff("distance"),
+        "horse_weather": same_count("weather"),
+        "horse_fc": same_count("field_condition"),
+        "horse_time": time(ave_time),
+        "horse_margin": ave("margin"),
+        "horse_corner3": ave("corner3"),
+        "horse_corner4": ave("corner4"),
+        "horse_last3f": ave("last3f"),
+        "horse_weight": ave("weight"),
+        "horse_wc": ave("weight_change"),
+        "horse_prize": ave("prize"),
+    }
+    params = feature_params.Params(ave_time, hist_pattern, feat_pattern)
+    with open(params_file, "wb") as f:
+        pickle.dump(params, f)
+
+    hist_df_list = []
+    for name, hist_df in yield_history_aggdf(df_encoded, hist_pattern, feat_pattern):
+        print("\r"+str(name),end="")
+        hist_df_list.append(hist_df)
+    df_feat = pd.concat(hist_df_list).sort_values("id").reset_index()
+    df_feat = pd.concat([df.sort_values("horse_no") for _, df in df_feat.groupby(feature_params.RACE_CULMNS)])
+    with sqlite3.connect(output_db) as conn:
+        df_feat.to_sql("horse", conn, if_exists="replace", index=False)
+
+if __name__ == "__main__":
+    args = parse_args()
+    prepare(
+        output_db=args.output_db, 
+        input_db=args.input_db, 
+        encoder_file=args.encoder_file, 
+        params_file=args.params_file,
+    )

@@ -100,7 +100,7 @@ def predict_baken_prob(prob):
     baken["馬単"] = pd.DataFrame({
         "一位": [str(no1) for no1, no2 in perm2],
         "二位": [str(no2) for no1, no2 in perm2],
-        "馬単オッズ(予想)": [0.775/umatan(*p12(no1, no2)) for no1, no2 in perm2],
+        "馬単オッズ(予想)": [0.75/umatan(*p12(no1, no2)) for no1, no2 in perm2],
         "馬単オッズ(今)": [odds_umatan.get((no1, no2)) for no1, no2 in perm2],
         "馬単確率": [umatan(*p12(no1, no2)) for no1, no2 in perm2]
     })
@@ -119,7 +119,7 @@ def predict_baken_prob(prob):
         "一位": [str(no1) for no1, no2, no3 in perm3],
         "二位": [str(no2) for no1, no2, no3 in perm3],
         "三位": [str(no3) for no1, no2, no3 in perm3],
-        "三連単オッズ(予想)": [0.775/sanrentan(*p123(no1, no2, no3)) for no1, no2, no3 in perm3],
+        "三連単オッズ(予想)": [0.725/sanrentan(*p123(no1, no2, no3)) for no1, no2, no3 in perm3],
         "三連単オッズ(今)": [odds_sanrentan.get((no1, no2, no3)) for no1, no2, no3 in perm3],
         "三連単確率": [sanrentan(*p123(no1, no2, no3)) for no1, no2, no3 in perm3]
     })
@@ -129,7 +129,7 @@ def predict_baken_prob(prob):
         "一位": [str(no1) for no1, no2, no3 in comb3],
         "二位": [str(no2) for no1, no2, no3 in comb3],
         "三位": [str(no3) for no1, no2, no3 in comb3],
-        "三連複オッズ(予想)": [0.775/sanrenpuku(*p123(no1, no2, no3)) for no1, no2, no3 in comb3],
+        "三連複オッズ(予想)": [0.75/sanrenpuku(*p123(no1, no2, no3)) for no1, no2, no3 in comb3],
         "三連複オッズ(今)": [odds_sanrenpuku.get(tuple(sorted([no1, no2, no3]))) for no1, no2, no3 in comb3],
         "三連複確率": [sanrenpuku(*p123(no1, no2, no3)) for no1, no2, no3 in comb3]
     })

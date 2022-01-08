@@ -25,6 +25,8 @@ def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"
         df_original = pd.read_sql_query("SELECT * FROM horse", conn)
         if "index" in df_original.columns:
             df_original = df_original.drop(columns="index")
+        df_original["id"] = df_original.index
+
     horse_encoder = HorseEncoder()
     df_format = horse_encoder.format(df_original)
     df_encoded = horse_encoder.fit_transform(df_format)
@@ -60,7 +62,7 @@ def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"
     with sqlite3.connect(output_db) as conn:
         for name, hist_df in yield_history_aggdf(df_encoded, hist_pattern, feat_pattern):
             print("\r"+str(name),end="")
-            hist_df.to_sql("horse", conn, if_exists="append")
+            hist_df.to_sql("horse", conn, if_exists="append", index=False)
 
 if __name__ == "__main__":
     prepare(
@@ -70,7 +72,7 @@ if __name__ == "__main__":
         params_file="params.pickle"
     )
     with sqlite3.connect("feature.sqlite") as conn:
-        df_feat = pd.read_sql_query("SELECT * FROM horse", conn).sort_values("index").reset_index()
+        df_feat = pd.read_sql_query("SELECT * FROM horse", conn).sort_values("id").reset_index()
     train = prepare_dataset(df_feat.query("'2008-01-01' <= race_date <= '2017-12-31'"), target="score")
     valid = prepare_dataset(df_feat.query("'2018-01-01' <= race_date <= '2020-12-31'"), target="score")
     test = prepare_dataset(df_feat.query("'2021-01-01' <= race_date <= '2021-12-31'"), target="score")

@@ -136,8 +136,10 @@ def predict_baken_prob(prob):
 
     for baken_name, df_baken in baken.items():
         df_baken.sort_values(f"{baken_name}確率").reset_index(drop=True, inplace=True)
-        df_baken["単勝確率"] = pd.Series([f"{p*100:.2f}%" for p in df_baken[f"{baken_name}確率"].values])
         df_baken["期待値"] = df_baken["{baken_name}オッズ(今)"] * df_baken[f"{baken_name}確率"]
+        df_baken[f"{baken_name}確率"] = pd.Series([f"{p*100:.2f}%" for p in df_baken[f"{baken_name}確率"].values])
+        df_baken[f"{baken_name}オッズ(予想)"] = pd.Series([round(p, 1) for p in df_baken[f"{baken_name}オッズ(予想)"].values])
+        df_baken["期待値"] = pd.Series([round(p, 3) for p in df_baken["期待値"].values])
     return baken
 
 if __name__ == "__main__":

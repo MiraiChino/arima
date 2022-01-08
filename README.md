@@ -4,7 +4,7 @@
 - [x] レースIDから出走情報をスクレイピングする
 - [x] スクレイピングした出走情報の特徴量をつくってモデルに入れられるようにする
 - [x] train
-- [ ] predict
+- [x] predict
 - [ ] lambdaで外部からアクセスできるWebページをつくる
 - [ ] ランクと回帰の重みづけを考える
 - [ ] テストデータでシミュレーションできるようにする
@@ -19,10 +19,13 @@
 - `python netkeiba.py --from 2008-01 --to 2021-12 --out netkeiba.sqlite`
 
 ## 特徴量などを前処理してDBに保存
-- `python feature_extractor.py --indb netkeiba.sqlite --outdb feature.sqlite --outencoder encoder.pickle --outparams params.pickle `
+- `python feature_extractor.py --indb netkeiba.sqlite --outdb feature.sqlite --outencoder encoder.pickle --outparams params.pickle`
 
 ## ランキングと回帰のモデルをtrainする
 - `python train.py --featdb feature.sqlite --outrank rank_model.pickle --outreg reg_model.pickle`
+
+## レースを予測する
+- `python predict.py --raceid 202206010111 --encoder encoder.pickle --params params.pickle --featdb feature.sqlite --rank rank_model.pickle --reg reg_model.pickle`
 
 ## 使用データ
 - [netkeiba.com](https://race.netkeiba.com/top/?rf=navi)からスクレイピングしたデータ

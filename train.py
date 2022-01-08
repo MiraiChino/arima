@@ -1,3 +1,4 @@
+import argparse
 import sqlite3
 
 import dill as pickle
@@ -7,6 +8,16 @@ from lightgbm import Dataset
 
 import feature_params
 
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--featdb", dest="feat_db", required=True, type=str,
+                        help="Example feature.sqlite")
+    parser.add_argument("--outrank", dest="rank_file", required=True, type=str,
+                        help="Example rank_model.pickle")
+    parser.add_argument("--outreg", dest="reg_file", required=True, type=str,
+                        help="Example reg_model.pickle")
+    return parser.parse_args()
 
 def prepare_dataset(df, target, noneed_columns=feature_params.NONEED_COLUMNS):
     if target in noneed_columns:
@@ -18,7 +29,8 @@ def prepare_dataset(df, target, noneed_columns=feature_params.NONEED_COLUMNS):
     return dataset
 
 if __name__ == "__main__":
-    with sqlite3.connect("feature.sqlite") as conn:
+    args = parse_args()
+    with sqlite3.connect(args.feat_db) as conn:
         df_feat = pd.read_sql_query("SELECT * FROM horse", conn)
     print(df_feat.head().T)
     print(df_feat.tail().T)
@@ -43,7 +55,7 @@ if __name__ == "__main__":
             lgb.early_stopping(50, first_metric_only=True),
         ],
     )
-    with open("rank_model.pickle", "wb") as f:
+    with open(args.rank_file, "wb") as f:
         pickle.dump(rank_model, f)
 
     train = prepare_dataset(df_feat.query("'2008-01-01' <= race_date <= '2017-12-31'"), target="prize")
@@ -65,5 +77,5 @@ if __name__ == "__main__":
             lgb.early_stopping(50),
         ],
     )
-    with open("reg_model.pickle", "wb") as f:
+    with open(args.reg_file, "wb") as f:
         pickle.dump(reg_model, f)

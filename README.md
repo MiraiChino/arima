@@ -21,6 +21,9 @@
 ## 特徴量などを前処理してDBに保存
 - `python feature_extractor.py --indb netkeiba.sqlite --outdb feature.sqlite --outencoder encoder.pickle --outparams params.pickle `
 
+## ランキングと回帰のモデルをtrainする
+- `python train.py --featdb feature.sqlite --outrank rank_model.pickle --outreg reg_model.pickle`
+
 ## 使用データ
 - [netkeiba.com](https://race.netkeiba.com/top/?rf=navi)からスクレイピングしたデータ
 - 2008年1月1日〜2021年12月12日（13年分、48207レース分）

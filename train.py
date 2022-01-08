@@ -9,7 +9,8 @@ import config
 import feature_params
 
 
-def prepare_dataset(df, target, noneed_columns=feature_params.NONEED_COLUMNS):
+def prepare_dataset(df, target):
+    noneed_columns = feature_params.NONEED_COLUMNS.copy()
     if target in noneed_columns:
         noneed_columns.remove(target)
     query = df.groupby(feature_params.RACE_COLUMNS)["name"].count().values.tolist()

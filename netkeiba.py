@@ -42,16 +42,19 @@ def scraping(func):
             print(traceback.format_exc())
     return wrapper
 
-def soup(html):
+def soup_html(html):
     html.encoding = html.apparent_encoding
-    return BeautifulSoup(html.text, 'html.parser')
+    return soup(html.text)
+
+def soup(html_text):
+    return BeautifulSoup(html_text, 'html.parser')
 
 @scraping
 def scrape_racedates(year, month):
     calendar_url = f"{BASE_URL}/top/calendar.html?year={year}&month={month}"
     print(f"scraping: {calendar_url}")
     calendar_html = requests.get(calendar_url)
-    if table := soup(calendar_html).find(class_="Calendar_Table"):
+    if table := soup_html(calendar_html).find(class_="Calendar_Table"):
         elems = table.find_all("td", class_="RaceCellBox")
         for elem in elems:
             if a_tag := elem.find("a"):
@@ -67,8 +70,7 @@ def scrape_raceids(driver, race_date):
     print(f"scraping: {racelist_url}")
     driver.get(racelist_url)
     if chrome.wait_element("RaceTopRace", driver):
-        racelist_text = driver.page_source
-        races = BeautifulSoup(racelist_text, 'html.parser').find_all("li", class_="RaceList_DataItem")
+        races = soup(driver.page_source).find_all("li", class_="RaceList_DataItem")
         for race in races:
             if a_tag := race.find("a"):
                 href = a_tag.attrs['href']
@@ -82,7 +84,7 @@ def scrape_results(race_id):
     race_url = f"{BASE_URL}/race/result.html?race_id={race_id}&rf=race_list"
     print(f"scraping: {race_url}")
     race_html = requests.get(race_url)
-    s = soup(race_html)
+    s = soup_html(race_html)
     racename = text.remove_trash(s.find("div", class_="RaceName").text)
     racedata11 = text.extract_racedata11(s.find("div", class_="RaceData01").text)
     racedata12 = text.extract_racedata12(s.find("div", class_="RaceData01").text)
@@ -99,7 +101,7 @@ def scrape_shutuba(race_id):
     shutuba_url = f"{BASE_URL}/race/shutuba.html?race_id={race_id}"
     print(f"scraping: {shutuba_url}")
     shutuba_html = requests.get(shutuba_url)
-    s = soup(shutuba_html)
+    s = soup_html(shutuba_html)
     racename = text.remove_trash(s.find("div", class_="RaceName").text)
     racedata11 = text.extract_racedata11(s.find("div", class_="RaceData01").text)
     racedata12 = text.extract_racedata12(s.find("div", class_="RaceData01").text)
@@ -115,37 +117,36 @@ def scrape_shutuba(race_id):
 def scrape_odds(driver, odds_url):
     print(f"scraping: {odds_url}")
     driver.get(odds_url)
-    if chrome.wait_all_elements():
-        odds_text = driver.page_source
-        tables = BeautifulSoup(odds_text, 'html.parser').find_all("table", class_="RaceOdds_HorseList_Table")
+    if chrome.wait_all_elements(driver):
+        tables = soup(driver.page_source).find_all("table", class_="RaceOdds_HorseList_Table")
         odds_list = text.extract_odds(tables[0])
         return odds_list
 
-def scrape_tanshou(driver):
+def scrape_tanshou(driver, race_id):
     tanshou_url = f"{BASE_URL}/odds/index.html?race_id={race_id}"
     odds_list = scrape_odds(driver, tanshou_url)
     tanshou_odds = {int(no): float(odds) for pop, waku, no, _, name, odds, huku, _ in odds_list}
     return tanshou_odds
 
-def scrape_umatan(driver):
+def scrape_umatan(driver, race_id):
     umatan_url = f"{BASE_URL}/odds/index.html?type=b6&race_id={race_id}&housiki=c99"
     odds_list = scrape_odds(driver, umatan_url)
     umatan_odds = {text.split_rentan(niren): float(odds) for pop, _, niren, odds, *_ in odds_list[1:]}
     return umatan_odds
 
-def scrape_umaren(driver):
+def scrape_umaren(driver, race_id):
     umaren_url = f"{BASE_URL}/odds/index.html?type=b4&race_id={race_id}&housiki=c99"
     odds_list = scrape_odds(driver, umaren_url)
     umaren_odds = {text.split_rentan(niren): float(odds) for pop, _, niren, odds, *_ in odds_list[1:]}
     return umaren_odds
 
-def scrape_sanrentan(driver):
+def scrape_sanrentan(driver, race_id):
     sanrentan_url = f"{BASE_URL}/odds/index.html?type=b8&race_id={race_id}&housiki=c99"
     odds_list = scrape_odds(driver, sanrentan_url)
     sanrentan_odds = {text.split_rentan(sanren): float(odds) for pop, _, sanren, odds, *_ in odds_list[1:]}
     return sanrentan_odds
 
-def scrape_sanrenpuku(driver):
+def scrape_sanrenpuku(driver, race_id):
     sanrenpuku_url = f"{BASE_URL}/odds/index.html?type=b7&race_id={race_id}&housiki=c99"
     odds_list = scrape_odds(driver, sanrenpuku_url)
     sanrenpuku_odds = {text.split_rentan(sanren): float(odds) for pop, _, sanren, odds, *_ in odds_list[1:]}

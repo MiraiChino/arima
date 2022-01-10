@@ -140,6 +140,7 @@ def scrape_umaren(driver, race_id):
 
 @scraping
 def scrape_sanren(driver, url):
+    @chrome.retry(10)
     def scrape_no23_odds():
         result = []
         for table in driver.find_elements_by_css_selector("table.Odds_Table"):
@@ -154,13 +155,7 @@ def scrape_sanren(driver, url):
     if driver.wait_all_elements():
         for no1 in driver.select_options("list_select_horse"):
             no1 = int(no1)
-            while True:
-                try:
-                    no23_odds = scrape_no23_odds()
-                    break
-                except:
-                    no23_odds = scrape_no23_odds()
-                    break
+            no23_odds = scrape_no23_odds()
             for no2, no3, odds in no23_odds:
                 sanren_odds[(no1, no2, no3)] = odds
         return sanren_odds

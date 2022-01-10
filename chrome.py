@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from functools import wraps
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -31,20 +32,29 @@ class ChromeDriver(webdriver.Chrome):
         return element
 
     def select_options(self, selector_id):
+        @retry(10)
         def select(value):
             select = Select(self.wait_clickable_element(f"select#{selector_id}"))
             select.select_by_value(value)
         dropdown = self.find_element_by_css_selector(f"select#{selector_id}")
         values = [o.get_attribute("value") for o in Select(dropdown).options[1:]]
         for value in values:
-            while True:
-                try:
-                    select(value)
-                    break
-                except:
-                    select(value)
-                    break
+            select(value)
             yield value
+
+def retry(num, verb=False):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for _ in range(num):
+                try:
+                    result = func(*args, **kwargs)
+                    return result
+                except Exception as e:
+                    if verb:
+                        print(f"{func.__name__}: {e.__class__.__name__}")
+        return wrapper
+    return decorator
 
 @contextmanager
 def driver():

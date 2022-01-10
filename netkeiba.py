@@ -69,15 +69,13 @@ def scrape_raceids(driver, race_date):
     racelist_url = f"{BASE_URL}/top/race_list.html?kaisai_date={race_date}"
     print(f"scraping: {racelist_url}")
     driver.get(racelist_url)
-    if chrome.wait_element("RaceTopRace", driver):
-        races = soup(driver.page_source).find_all("li", class_="RaceList_DataItem")
-        for race in races:
-            if a_tag := race.find("a"):
-                href = a_tag.attrs['href']
-                match = text.raceid.findall(href)
-                if len(match) > 0:
-                    race_id = match[0]
-                    yield race_id
+    if driver.wait_all_elements():
+        for race in driver.find_elements_by_css_selector("li.RaceList_DataItem"):
+            href = race.find_element_by_css_selector("a").get_attribute("href")
+            match = text.raceid.findall(href)
+            if len(match) > 0:
+                race_id = match[0]
+                yield race_id
 
 @scraping
 def scrape_results(race_id):
@@ -140,17 +138,40 @@ def scrape_umaren(driver, race_id):
     umaren_odds = {text.split_rentan(niren): float(odds) for pop, _, niren, odds, *_ in odds_list[1:]}
     return umaren_odds
 
+@scraping
+def scrape_sanren(driver, url):
+    def scrape_no23_odds():
+        result = []
+        for table in driver.find_elements_by_css_selector("table.Odds_Table"):
+            col_label = table.find_element_by_css_selector("tr.col_label")
+            no2 = int(text.remove_trash(col_label.text))
+            odds_list = text.extract_odds(table.get_attribute("innerHTML"))
+            result += [(no2, int(no3), float(odds)) for no3, odds, _ in odds_list]
+        return result
+    print(f"scraping: {url}")
+    driver.get(url)
+    sanren_odds = {}
+    if driver.wait_all_elements():
+        for no1 in driver.select_options("list_select_horse"):
+            no1 = int(no1)
+            while True:
+                try:
+                    no23_odds = scrape_no23_odds()
+                    break
+                except:
+                    no23_odds = scrape_no23_odds()
+                    break
+            for no2, no3, odds in no23_odds:
+                sanren_odds[(no1, no2, no3)] = odds
+        return sanren_odds
+
 def scrape_sanrentan(driver, race_id):
-    sanrentan_url = f"{BASE_URL}/odds/index.html?type=b8&race_id={race_id}&housiki=c99"
-    odds_list = scrape_odds(driver, sanrentan_url)
-    sanrentan_odds = {text.split_rentan(sanren): float(odds) for pop, _, sanren, odds, *_ in odds_list[1:]}
-    return sanrentan_odds
+    sanrentan_url = f"{BASE_URL}/odds/index.html?type=b8&race_id={race_id}&&housiki=c0"
+    return scrape_sanren(driver, sanrentan_url)
 
 def scrape_sanrenpuku(driver, race_id):
-    sanrenpuku_url = f"{BASE_URL}/odds/index.html?type=b7&race_id={race_id}&housiki=c99"
-    odds_list = scrape_odds(driver, sanrenpuku_url)
-    sanrenpuku_odds = {text.split_rentan(sanren): float(odds) for pop, _, sanren, odds, *_ in odds_list[1:]}
-    return sanrenpuku_odds
+    sanrenpuku_url = f"{BASE_URL}/odds/index.html?type=b7&race_id={race_id}&housiki=c0"
+    return scrape_sanren(driver, sanrenpuku_url)
 
 def daterange(from_date, to_date):
     from_date = date_type(from_date)

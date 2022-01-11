@@ -115,7 +115,7 @@ def scrape_shutuba(race_id):
 def scrape_odds(driver, odds_url):
     print(f"scraping: {odds_url}")
     driver.get(odds_url)
-    if chrome.wait_all_elements(driver):
+    if driver.wait_all_elements():
         tables = soup(driver.page_source).find_all("table", class_="RaceOdds_HorseList_Table")
         odds_list = text.extract_odds(tables[0])
         return odds_list
@@ -126,47 +126,58 @@ def scrape_tanshou(driver, race_id):
     tanshou_odds = {int(no): float(odds) for pop, waku, no, _, name, odds, huku, _ in odds_list}
     return tanshou_odds
 
-def scrape_umatan(driver, race_id):
-    umatan_url = f"{BASE_URL}/odds/index.html?type=b6&race_id={race_id}&housiki=c99"
-    odds_list = scrape_odds(driver, umatan_url)
-    umatan_odds = {text.split_rentan(niren): float(odds) for pop, _, niren, odds, *_ in odds_list[1:]}
-    return umatan_odds
-
-def scrape_umaren(driver, race_id):
-    umaren_url = f"{BASE_URL}/odds/index.html?type=b4&race_id={race_id}&housiki=c99"
-    odds_list = scrape_odds(driver, umaren_url)
-    umaren_odds = {text.split_rentan(niren): float(odds) for pop, _, niren, odds, *_ in odds_list[1:]}
-    return umaren_odds
-
 @scraping
-def scrape_sanren(driver, url):
-    @chrome.retry(10)
-    def scrape_no23_odds():
-        result = []
+def scrape_12odds(driver, url):
+    print(f"scraping: {url}")
+    driver.get(url)
+    umaren_odds = {}
+    if driver.wait_all_elements():
+        no12_odds = []
         for table in driver.find_elements_by_css_selector("table.Odds_Table"):
             col_label = table.find_element_by_css_selector("tr.col_label")
             no2 = int(text.remove_trash(col_label.text))
             odds_list = text.extract_odds(table.get_attribute("innerHTML"))
-            result += [(no2, int(no3), float(odds)) for no3, odds, _ in odds_list]
+            no12_odds += [(no2, int(no3), float(odds)) for no3, odds, _ in odds_list]
+        for no1, no2, odds in no12_odds:
+            umaren_odds[(no1, no2)] = odds
+    return umaren_odds
+
+def scrape_umatan(driver, race_id):
+    umatan_url = f"{BASE_URL}/odds/index.html?type=b6&race_id={race_id}&housiki=c0"
+    return scrape_12odds(driver, umatan_url)
+
+def scrape_umaren(driver, race_id):
+    umaren_url = f"{BASE_URL}/odds/index.html?type=b4&race_id={race_id}&housiki=c0"
+    return scrape_12odds(driver, umaren_url)
+
+@scraping
+def scrape_ninki(driver, ninki_url, convert_func=None):
+    @chrome.retry(10)
+    def scrape_oddstable():
+        time.sleep(1)
+        table = driver.find_element_by_css_selector("table.RaceOdds_HorseList_Table")
+        odds_list = text.extract_odds(table.get_attribute("innerHTML"))
+        if convert_func:
+            result = convert_func(odds_list)
+        else:
+            result = odds_list
         return result
-    print(f"scraping: {url}")
-    driver.get(url)
-    sanren_odds = {}
+    print(f"scraping: {ninki_url}")
+    driver.get(ninki_url)
     if driver.wait_all_elements():
-        for no1 in driver.select_options("list_select_horse"):
-            no1 = int(no1)
-            no23_odds = scrape_no23_odds()
-            for no2, no3, odds in no23_odds:
-                sanren_odds[(no1, no2, no3)] = odds
-        return sanren_odds
+        for value in driver.select_options("ninki_select"):
+            odds_list = scrape_oddstable()
+            yield odds_list
 
-def scrape_sanrentan(driver, race_id):
-    sanrentan_url = f"{BASE_URL}/odds/index.html?type=b8&race_id={race_id}&&housiki=c0"
-    return scrape_sanren(driver, sanrentan_url)
+def scrape_sanrentan_generator(driver, race_id):
+    sanrentan_url = f"{BASE_URL}/odds/index.html?type=b8&race_id={race_id}&&housiki=c99"
+    convert = lambda odds_list: {text.split_rentan(sanren): float(odds) for pop, _, sanren, odds, *_ in odds_list[1:]}
+    return scrape_ninki(driver, sanrentan_url, convert)
 
-def scrape_sanrenpuku(driver, race_id):
-    sanrenpuku_url = f"{BASE_URL}/odds/index.html?type=b7&race_id={race_id}&housiki=c0"
-    return scrape_sanren(driver, sanrenpuku_url)
+def scrape_sanrenpuku_generator(driver, race_id):
+    sanrenpuku_url = f"{BASE_URL}/odds/index.html?type=b7&race_id={race_id}&housiki=c99"
+    convert = lambda odds_list: {text.split_rentan(sanren): float(odds) for pop, _, sanren, odds, *_ in odds_list[1:]}
+    return scrape_ninki(driver, sanrenpuku_url, convert)
 
 def daterange(from_date, to_date):
     from_date = date_type(from_date)

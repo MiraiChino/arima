@@ -32,7 +32,7 @@ class ChromeDriver(webdriver.Chrome):
         return element
 
     def select_options(self, selector_id):
-        @retry(10)
+        @retry(10, verb=True)
         def select(value):
             select = Select(self.wait_clickable_element(f"select#{selector_id}"))
             select.select_by_value(value)
@@ -46,13 +46,13 @@ def retry(num, verb=False):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            for _ in range(num):
+            for i in range(num):
                 try:
                     result = func(*args, **kwargs)
                     return result
                 except Exception as e:
                     if verb:
-                        print(f"{func.__name__}: {e.__class__.__name__}")
+                        print(f"retry{i}: {func.__name__}: {e.__class__.__name__}")
         return wrapper
     return decorator
 

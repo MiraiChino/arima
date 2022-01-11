@@ -19,7 +19,7 @@ rank_params = {
     "objective": "lambdarank",
     "metric": "ndcg",
     "lambdarank_truncation_level": 10,
-    "ndcg_eval_at": [3, 5],
+    "ndcg_eval_at": [1, 3, 5],
     "boosting_type": "gbdt",
     "learning_rate": 0.01,
 }

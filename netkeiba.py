@@ -152,7 +152,7 @@ def scrape_umaren(driver, race_id):
 
 @scraping
 def scrape_ninki(driver, ninki_url, convert_func=None):
-    @chrome.retry(10)
+    @chrome.retry(10, verb=True)
     def scrape_oddstable():
         time.sleep(1)
         table = driver.find_element_by_css_selector("table.RaceOdds_HorseList_Table")
@@ -166,6 +166,7 @@ def scrape_ninki(driver, ninki_url, convert_func=None):
     driver.get(ninki_url)
     if driver.wait_all_elements():
         for value in driver.select_options("ninki_select"):
+            print(f"select ninki{int(value)+1}~{int(value)+100}")
             odds_list = scrape_oddstable()
             yield odds_list
 

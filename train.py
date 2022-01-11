@@ -27,6 +27,7 @@ if __name__ == "__main__":
     train = prepare_dataset(df_feat.query(config.train_query), target=config.rank_target)
     valid = prepare_dataset(df_feat.query(config.valid_query), target=config.rank_target)
     test = prepare_dataset(df_feat.query(config.test_query), target=config.rank_target)
+    columns = train.data.columns
 
     rank_model = lgb.train(
         config.rank_params,
@@ -35,15 +36,17 @@ if __name__ == "__main__":
         valid_sets=valid,
         callbacks=[
             lgb.log_evaluation(10),
-            lgb.early_stopping(50, first_metric_only=True),
+            lgb.early_stopping(100),
         ],
     )
+    print(pd.Series(rank_model.feature_importance(importance_type='gain'), index=columns).sort_values(ascending=False)[:50])
     with open(config.rank_file, "wb") as f:
         pickle.dump(rank_model, f)
 
     train = prepare_dataset(df_feat.query(config.train_query), target=config.reg_target)
     valid = prepare_dataset(df_feat.query(config.valid_query), target=config.reg_target)
     test = prepare_dataset(df_feat.query(config.test_query), target=config.reg_target)
+    columns = train.data.columns
 
     reg_model = lgb.train(
         config.reg_params,
@@ -52,8 +55,9 @@ if __name__ == "__main__":
         valid_sets=valid,
         callbacks=[
             lgb.log_evaluation(10),
-            lgb.early_stopping(50),
+            lgb.early_stopping(100),
         ],
     )
+    print(pd.Series(reg_model.feature_importance(importance_type='gain'), index=columns).sort_values(ascending=False)[:50])
     with open(config.reg_file, "wb") as f:
         pickle.dump(reg_model, f)

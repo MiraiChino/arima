@@ -1,6 +1,7 @@
 import argparse
 import itertools
 import sqlite3
+from dataclasses import dataclass, field
 
 import dill as pickle
 import numpy as np
@@ -19,6 +20,13 @@ def parse_args():
     parser.add_argument("--raceid", dest="race_id", required=True, type=str,
                         help="Example 202206010111.")
     return parser.parse_args()
+
+@dataclass
+class Baken:
+    nums: list = field(default_factory=list)
+    prob: dict = field(default_factory=dict)
+    odds: dict = field(default_factory=dict)
+    df: pd.DataFrame = pd.DataFrame()
 
 def softmax(x):
     c = np.max(x)
@@ -39,18 +47,26 @@ def p123(no1_index, no2_index, no3_index, probs, d=0.65):
     p3 = probs[no3_index]**d / sum(x**d for x in probs.values())
     return *p12(no1_index, no2_index, probs), p3
 
-def sanrentan(a, b, c):
+def p_sanrentan(a, b, c):
     return a*b*c / ((1-a)*(1-b-c))
 
-def sanrenpuku(a, b, c):
-    return sanrentan(a,b,c) + sanrentan(a,c,b) + sanrentan(b,a,c) \
-            + sanrentan(b,c,a) + sanrentan(c,a,b) + sanrentan(c,b,a)
+def p_sanrenpuku(a, b, c):
+    return p_sanrentan(a,b,c) + p_sanrentan(a,c,b) + p_sanrentan(b,a,c) \
+            + p_sanrentan(b,c,a) + p_sanrentan(c,a,b) + p_sanrentan(c,b,a)
 
-def umatan(a, b):
+def p_umatan(a, b):
     return a*b / (1-b)
 
-def umaren(a, b):
-    return umatan(a,b) + umatan(b,a)
+def p_umaren(a, b):
+    return p_umatan(a,b) + p_umatan(b,a)
+
+def tuples1_in_tuples2(tuples1, tuples2):
+    if not tuples1:
+        return False
+    for t1 in tuples1:
+        if t1 not in tuples2:
+            return False
+    return True
 
 def predict_result_prob(df):
     with open(config.encoder_file, "rb") as f:
@@ -77,67 +93,83 @@ def predict_result_prob(df):
     prob = np.array(probs).mean(axis=0)
     return {i: p for i, p in zip(df_feat["horse_no"].to_list(), prob)}
 
-def predict_baken_prob(prob, race_id):
+def predict_baken_prob(prob, race_id, top=30):
+    baken = {
+        "単勝": Baken(),
+        "馬単": Baken(),
+        "馬連": Baken(),
+        "三連単": Baken(),
+        "三連複": Baken()
+    }
+    baken["単勝"].nums = list(prob.keys())
+    baken["馬単"].nums = list(itertools.permutations(baken["単勝"].nums, 2))
+    baken["馬連"].nums = list(itertools.combinations(baken["単勝"].nums, 2))
+    baken["三連単"].nums = list(itertools.permutations(baken["単勝"].nums, 3))
+    baken["三連複"].nums = list(itertools.combinations(baken["単勝"].nums, 3))
+    baken["単勝"].prob = {no1: p1(no1, prob) for no1 in baken["単勝"].nums}
+    baken["馬単"].prob = {(no1, no2): p_umatan(*p12(no1, no2, prob)) for no1, no2 in baken["馬単"].nums}
+    baken["馬連"].prob = {tuple(sorted([no1, no2])): p_umaren(*p12(no1, no2, prob)) for no1, no2 in baken["馬連"].nums}
+    baken["三連単"].prob = {(no1, no2, no3): p_sanrentan(*p123(no1, no2, no3, prob)) for no1, no2, no3 in baken["三連単"].nums}
+    baken["三連複"].prob = {tuple(sorted([no1, no2, no3])): p_sanrenpuku(*p123(no1, no2, no3, prob)) for no1, no2, no3 in baken["三連複"].nums}
+    
+    for b_type, b in baken.items():
+        high_probs = sorted(b.prob.items(), key=lambda x: x[1], reverse=True)[:top]
+        baken[b_type].nums = [i for i, _ in high_probs]
+        baken[b_type].prob = dict(high_probs)
+
     with chrome.driver() as driver:
-        odds_tanshou = netkeiba.scrape_tanshou(driver, race_id)
-        odds_umatan = netkeiba.scrape_umatan(driver, race_id)
-        odds_umaren = netkeiba.scrape_umaren(driver, race_id)
-        odds_sanrentan = netkeiba.scrape_sanrentan(driver, race_id)
-        odds_sanrenpuku = netkeiba.scrape_sanrenpuku(driver, race_id)
+        baken["単勝"].odds = netkeiba.scrape_tanshou(driver, race_id)
+        baken["馬単"].odds = netkeiba.scrape_umatan(driver, race_id)
+        baken["馬連"].odds = netkeiba.scrape_umaren(driver, race_id)
+        sanrentan_odds_gen = netkeiba.scrape_sanrentan_generator(driver, race_id)
+        sanrenpuku_odds_gen = netkeiba.scrape_sanrenpuku_generator(driver, race_id)
+        while not tuples1_in_tuples2(baken["三連単"].nums[:top], list(baken["三連単"].odds.keys())):
+            baken["三連単"].odds |= next(sanrentan_odds_gen)
+        while not tuples1_in_tuples2(baken["三連複"].nums[:top], list(baken["三連複"].odds.keys())):
+            baken["三連複"].odds |= next(sanrenpuku_odds_gen)
 
-    nums = list(prob.keys())
-    baken = {}
-    baken["単勝"] = pd.DataFrame({
-        "一位": [str(no1) for no1 in nums],
-        "単勝オッズ(予想)": [0.8/p1(no1, prob) for no1 in nums],
-        "単勝オッズ(今)": [odds_tanshou.get(no1) for no1 in nums],
-        "単勝確率": [p1(no1, prob) for no1 in nums]
+    baken["単勝"].df = pd.DataFrame({
+        "一位": [str(no1) for no1 in baken["単勝"].nums],
+        "単勝オッズ(予想)": [0.8/p1 for p1 in baken["単勝"].prob.values()],
+        "単勝オッズ(今)": [baken["単勝"].odds[no1] for no1 in baken["単勝"].nums],
+        "単勝確率": [p1 for p1 in baken["単勝"].prob.values()]
+    })
+    baken["馬単"].df = pd.DataFrame({
+        "一位": [str(no1) for no1, no2 in baken["馬単"].nums],
+        "二位": [str(no2) for no1, no2 in baken["馬単"].nums],
+        "馬単オッズ(予想)": [0.75/p for p in baken["馬単"].prob.values()],
+        "馬単オッズ(今)": [baken["馬単"].odds[(no1, no2)] for no1, no2 in baken["馬単"].nums],
+        "馬単確率": [p for p in baken["馬単"].prob.values()]
+    })
+    baken["馬連"].df = pd.DataFrame({
+        "一位": [str(no1) for no1, no2 in baken["馬連"].nums],
+        "二位": [str(no2) for no1, no2 in baken["馬連"].nums],
+        "馬連オッズ(予想)": [0.775/p for p in baken["馬連"].prob.values()],
+        "馬連オッズ(今)": [baken["馬連"].odds[(no1, no2)] for no1, no2 in baken["馬連"].nums],
+        "馬連確率": [p for p in baken["馬連"].prob.values()]
+    })
+    baken["三連単"].df = pd.DataFrame({
+        "一位": [str(no1) for no1, no2, no3 in baken["三連単"].nums],
+        "二位": [str(no2) for no1, no2, no3 in baken["三連単"].nums],
+        "三位": [str(no3) for no1, no2, no3 in baken["三連単"].nums],
+        "三連単オッズ(予想)": [0.725/p for p in baken["三連単"].prob.values()],
+        "三連単オッズ(今)": [baken["三連単"].odds[(no1, no2, no3)] for no1, no2, no3 in baken["三連単"].nums],
+        "三連単確率": [p for p in baken["三連単"].prob.values()]
+    })
+    baken["三連複"].df = pd.DataFrame({
+        "一位": [str(no1) for no1, no2, no3 in baken["三連複"].nums],
+        "二位": [str(no2) for no1, no2, no3 in baken["三連複"].nums],
+        "三位": [str(no3) for no1, no2, no3 in baken["三連複"].nums],
+        "三連複オッズ(予想)": [0.75/p for p in baken["三連複"].prob.values()],
+        "三連複オッズ(今)": [baken["三連複"].odds[(no1, no2, no3)] for no1, no2, no3 in baken["三連複"].nums],
+        "三連複確率": [p for p in baken["三連複"].prob.values()]
     })
 
-    perm2 = list(itertools.permutations(nums, 2))
-    baken["馬単"] = pd.DataFrame({
-        "一位": [str(no1) for no1, no2 in perm2],
-        "二位": [str(no2) for no1, no2 in perm2],
-        "馬単オッズ(予想)": [0.75/umatan(*p12(no1, no2, prob)) for no1, no2 in perm2],
-        "馬単オッズ(今)": [odds_umatan.get((no1, no2)) for no1, no2 in perm2],
-        "馬単確率": [umatan(*p12(no1, no2, prob)) for no1, no2 in perm2]
-    })
-
-    comb2 = list(itertools.combinations(nums, 2))
-    baken["馬連"] = pd.DataFrame({
-        "一位": [str(no1) for no1, no2 in comb2],
-        "二位": [str(no2) for no1, no2 in comb2],
-        "馬連オッズ(予想)": [0.775/umaren(*p12(no1, no2, prob)) for no1, no2 in comb2],
-        "馬連オッズ(今)": [odds_umaren.get(tuple(sorted([no1, no2]))) for no1, no2 in comb2],
-        "馬連確率": [umaren(*p12(no1, no2, prob)) for no1, no2 in comb2]
-    })
-
-    perm3 = list(itertools.permutations(nums, 3))
-    baken["三連単"] = pd.DataFrame({
-        "一位": [str(no1) for no1, no2, no3 in perm3],
-        "二位": [str(no2) for no1, no2, no3 in perm3],
-        "三位": [str(no3) for no1, no2, no3 in perm3],
-        "三連単オッズ(予想)": [0.725/sanrentan(*p123(no1, no2, no3, prob)) for no1, no2, no3 in perm3],
-        "三連単オッズ(今)": [odds_sanrentan.get((no1, no2, no3)) for no1, no2, no3 in perm3],
-        "三連単確率": [sanrentan(*p123(no1, no2, no3, prob)) for no1, no2, no3 in perm3]
-    })
-
-    comb3 = list(itertools.combinations(nums, 3))
-    baken["三連複"] = pd.DataFrame({
-        "一位": [str(no1) for no1, no2, no3 in comb3],
-        "二位": [str(no2) for no1, no2, no3 in comb3],
-        "三位": [str(no3) for no1, no2, no3 in comb3],
-        "三連複オッズ(予想)": [0.75/sanrenpuku(*p123(no1, no2, no3, prob)) for no1, no2, no3 in comb3],
-        "三連複オッズ(今)": [odds_sanrenpuku.get(tuple(sorted([no1, no2, no3]))) for no1, no2, no3 in comb3],
-        "三連複確率": [sanrenpuku(*p123(no1, no2, no3, prob)) for no1, no2, no3 in comb3]
-    })
-
-    for baken_name, df_baken in baken.items():
-        df_baken.sort_values(f"{baken_name}確率").reset_index(drop=True, inplace=True)
-        df_baken["期待値"] = df_baken[f"{baken_name}オッズ(今)"] * df_baken[f"{baken_name}確率"]
-        df_baken[f"{baken_name}確率"] = pd.Series([f"{p*100:.2f}%" for p in df_baken[f"{baken_name}確率"].values])
-        df_baken[f"{baken_name}オッズ(予想)"] = pd.Series([round(p, 1) for p in df_baken[f"{baken_name}オッズ(予想)"].values])
-        df_baken["期待値"] = pd.Series([round(p, 3) for p in df_baken["期待値"].values])
+    for b_type, b in baken.items():
+        b.df["期待値"] = b.df[f"{b_type}オッズ(今)"] * b.df[f"{b_type}確率"]
+        b.df["期待値"] = pd.Series([round(p, 2) for p in b.df["期待値"].values])
+        b.df[f"{b_type}確率"] = pd.Series([f"{p*100:.2f}%" for p in b.df[f"{b_type}確率"].values])
+        b.df[f"{b_type}オッズ(予想)"] = pd.Series([round(p, 1) for p in b.df[f"{b_type}オッズ(予想)"].values])
     return baken
 
 if __name__ == "__main__":

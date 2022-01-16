@@ -11,7 +11,6 @@ from sklearn.preprocessing import scale
 import chrome
 import config
 import feature_extractor
-import feature_params
 import netkeiba
 
 
@@ -68,20 +67,21 @@ def tuples1_in_tuples2(tuples1, tuples2):
             return False
     return True
 
-def predict_result_prob(df):
+def result_prob(df):
     with open(config.encoder_file, "rb") as f:
         netkeiba_encoder = pickle.load(f)
-    with open(config.params_file, "rb") as f:
-        params = pickle.load(f)
     df_format = netkeiba_encoder.format(df)
     df_encoded = netkeiba_encoder.transform(df_format)
-        
     df_feat = pd.DataFrame()
     with sqlite3.connect(config.feat_db) as conn:
+        df_avetime = pd.read_sql_query(f"SELECT * FROM ave_time", conn)
+        ave_time = {(f, d, fc): t for f, d, fc, t in df_avetime.to_dict(orient="split")["data"]}
+        hist_pattern = config.hist_pattern
+        feat_pattern = config.feature_pattern(ave_time)
         for name in df_encoded["name"].unique():
-            df_agg = feature_extractor.search_history(name, df_encoded, params.hist_pattern, params.feat_pattern, conn)
+            df_agg = feature_extractor.search_history(name, df_encoded, hist_pattern, feat_pattern, conn)
             df_feat = pd.concat([df_feat, df_agg])
-    df_feat = df_feat.drop(columns=feature_params.NONEED_COLUMNS)
+    df_feat = df_feat.drop(columns=config.NONEED_COLUMNS)
 
     probs = []
     for model_file in (config.rank_file, config.reg_file):
@@ -93,7 +93,7 @@ def predict_result_prob(df):
     prob = np.array(probs).mean(axis=0)
     return {i: p for i, p in zip(df_feat["horse_no"].to_list(), prob)}
 
-def predict_baken_prob(prob, race_id, top=30):
+def baken_prob(prob, race_id, top=30):
     baken = {
         "単勝": Baken(),
         "馬単": Baken(),
@@ -176,5 +176,5 @@ if __name__ == "__main__":
     args = parse_args()
     horses = [horse for horse in netkeiba.scrape_shutuba(args.race_id)]
     df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
-    result_prob = predict_result_prob(df_original)
-    baken = predict_baken_prob(result_prob, args.race_id)
+    result = result_prob(df_original)
+    baken = baken_prob(result, args.race_id)

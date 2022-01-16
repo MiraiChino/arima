@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 
 import config
-import feature_params
 from encoder import HorseEncoder
 
 
@@ -29,8 +28,6 @@ def diff(column):
 
 def calc_ave_time(df):
     return {key: race["time"].mean() for key, race in df.groupby(["field", "distance", "field_condition"])}
-
-
 
 def time(ave):
     def wrapper(history, now, index):
@@ -106,7 +103,7 @@ def search_history(name, df_encoded, hist_pattern, feat_pattern, feature_db):
     hist_df = pd.DataFrame(np.concatenate([hist, a_agghist], axis=1), columns=columns+past_columns)
     return hist_df.tail(1)
 
-def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle", params_file="params.pickle"):
+def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"):
     with sqlite3.connect(input_db) as conn:
         df_original = pd.read_sql_query("SELECT * FROM horse", conn)
         if "index" in df_original.columns:
@@ -120,30 +117,11 @@ def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"
         pickle.dump(horse_encoder, f)
 
     ave_time = calc_ave_time(df_encoded)
-    hist_pattern = [1, 2, 3, 4, 5, 10, 999999]
-    feat_pattern = {
-        "horse_interval": interval,
-        "horse_place": same_count("place_code"),
-        "horse_odds": ave("odds"),
-        "horse_pop": ave("pop"),
-        "horse_result": ave("result"),
-        "horse_jockey": same_count("jockey"),
-        "horse_penalty": ave("penalty"),
-        "horse_distance": diff("distance"),
-        "horse_weather": same_count("weather"),
-        "horse_fc": same_count("field_condition"),
-        "horse_time": time(ave_time),
-        "horse_margin": ave("margin"),
-        "horse_corner3": ave("corner3"),
-        "horse_corner4": ave("corner4"),
-        "horse_last3f": ave("last3f"),
-        "horse_weight": ave("weight"),
-        "horse_wc": ave("weight_change"),
-        "horse_prize": ave("prize"),
-    }
-    params = feature_params.Params(ave_time, hist_pattern, feat_pattern)
-    with open(params_file, "wb") as f:
-        pickle.dump(params, f)
+    hist_pattern = config.hist_pattern
+    feat_pattern = config.feature_pattern(ave_time)
+    df_avetime = pd.Series(ave_time).rename_axis(["field", "distance", "field_condition"]).reset_index(name="ave_time")
+    with sqlite3.connect(output_db) as conn:
+        df_avetime.to_sql("ave_time", conn, if_exists="replace", index=False)
 
     hist_df_list = []
     for name, hist_df in yield_history_aggdf(df_encoded, hist_pattern, feat_pattern):
@@ -151,7 +129,7 @@ def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"
         hist_df_list.append(hist_df)
     df_feat = pd.concat(hist_df_list)
     df_feat = df_feat.sort_values("id").reset_index()
-    df_feat = pd.concat([df.sort_values("horse_no") for _, df in df_feat.groupby(feature_params.RACE_COLUMNS)])
+    df_feat = pd.concat([df.sort_values("horse_no") for _, df in df_feat.groupby(config.RACE_COLUMNS)])
     with sqlite3.connect(output_db) as conn:
         df_feat.to_sql("horse", conn, if_exists="replace", index=False)
 
@@ -160,5 +138,4 @@ if __name__ == "__main__":
         output_db=config.feat_db, 
         input_db=config.netkeiba_db, 
         encoder_file=config.encoder_file, 
-        params_file=config.params_file,
     )

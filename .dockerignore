@@ -1,0 +1,14 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environments
+venv/
+
+.gitignore
+README.md
+train.py
+arima.ipynb
+netkeiba.sqlite

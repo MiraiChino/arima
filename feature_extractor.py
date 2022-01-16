@@ -1,3 +1,4 @@
+import copy
 import sqlite3
 
 import dill as pickle
@@ -92,7 +93,7 @@ def search_history(name, df_encoded, hist_pattern, feat_pattern, feature_db):
     hist = hist.sort_values("race_date")
     hist = hist.loc[:, :'score']
 
-    row_target = df_encoded[df_encoded["name"] == name]
+    row_target = copy.deepcopy(df_encoded[df_encoded["name"] == name])
     if "id" not in row_target.columns:
         row_target["id"] = None
     if "index" not in row_target.columns:

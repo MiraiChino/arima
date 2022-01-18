@@ -59,6 +59,15 @@ def p_umatan(a, b):
 def p_umaren(a, b):
     return p_umatan(a,b) + p_umatan(b,a)
 
+def synthetic_odds(odds):
+    return 1 / sum(1/o for o in odds)
+
+def cumulative_odds(odds):
+    return [synthetic_odds(odds[:i]) for i in range(1, len(odds)+1)]
+
+def cumulative_prob(prob):
+    return [sum(prob[:i]) for i in range(1, len(prob)+1)]
+
 def tuples1_in_tuples2(tuples1, tuples2):
     if not tuples1:
         return False
@@ -170,6 +179,10 @@ def baken_prob(prob, race_id, top=30):
         b.df["期待値"] = pd.Series([round(p, 2) for p in b.df["期待値"].values])
         b.df[f"{b_type}確率"] = pd.Series([f"{p*100:.2f}%" for p in b.df[f"{b_type}確率"].values])
         b.df[f"{b_type}オッズ(予想)"] = pd.Series([round(p, 1) for p in b.df[f"{b_type}オッズ(予想)"].values])
+        b.df["合成オッズ"] = pd.Series(cumulative_odds(b.df[f"{b_type}オッズ(今)"].values))
+        b.df["合成オッズ"] = pd.Series([round(p, 2) for p in b.df["合成オッズ"].values])
+        b.df["合成期待値"] = b.df["合成オッズ"] * cumulative_prob(list(b.prob.values()))
+        b.df["合成期待値"] = pd.Series([round(p, 2) for p in b.df["合成期待値"].values])
         b.df.index += 1
     return baken
 

@@ -181,6 +181,7 @@ def baken_prob(prob, race_id, top=30):
         b.df[f"{b_type}オッズ(予想)"] = pd.Series([round(p, 1) for p in b.df[f"{b_type}オッズ(予想)"].values])
         b.df["合成オッズ"] = pd.Series(cumulative_odds(b.df[f"{b_type}オッズ(今)"].values))
         b.df["合成オッズ"] = pd.Series([round(p, 2) for p in b.df["合成オッズ"].values])
+        b.df["累積確率"] = pd.Series([f"{p*100:.2f}%" for p in cumulative_prob(list(b.prob.values()))])
         b.df["合成期待値"] = b.df["合成オッズ"] * cumulative_prob(list(b.prob.values()))
         b.df["合成期待値"] = pd.Series([round(p, 2) for p in b.df["合成期待値"].values])
         b.df.index += 1

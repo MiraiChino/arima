@@ -49,7 +49,7 @@ def extract_result(text):
         return None, None, None, None, None, None, None, None, \
                 None, None, None, None, None, None, None, None, None
         
-#発走時刻,ダ芝,距離,右左,天候,馬場
+#発走時刻,ダ芝,距離,右左
 def extract_racedata11(racedata1_text):
     text = remove_trash(racedata1_text)
     if match := racedata11.search(text):

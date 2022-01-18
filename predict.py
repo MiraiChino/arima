@@ -102,7 +102,7 @@ def result_prob(df):
     prob = np.array(probs).mean(axis=0)
     return {i: p for i, p in zip(df_feat["horse_no"].to_list(), prob)}
 
-def baken_prob(prob, race_id, top=30):
+def baken_prob(prob, names, race_id, top=30):
     baken = {
         "単勝": Baken(),
         "馬単": Baken(),
@@ -138,48 +138,50 @@ def baken_prob(prob, race_id, top=30):
             baken["三連複"].odds |= next(sanrenpuku_odds_gen)
 
     baken["単勝"].df = pd.DataFrame({
-        "一位": [str(no1) for no1 in baken["単勝"].nums],
-        "単勝オッズ(予想)": [0.8/p1 for p1 in baken["単勝"].prob.values()],
-        "単勝オッズ(今)": [baken["単勝"].odds[no1] for no1 in baken["単勝"].nums],
-        "単勝確率": [p1 for p1 in baken["単勝"].prob.values()]
+        "馬番": [str(no1) for no1 in baken["単勝"].nums],
+        "馬名": [name for name in names],
+        "オッズ(予想)": [0.8/p1 for p1 in baken["単勝"].prob.values()],
+        "オッズ(今)": [baken["単勝"].odds[no1] for no1 in baken["単勝"].nums],
+        "確率": [p1 for p1 in baken["単勝"].prob.values()]
     })
     baken["馬単"].df = pd.DataFrame({
         "一位": [str(no1) for no1, no2 in baken["馬単"].nums],
         "二位": [str(no2) for no1, no2 in baken["馬単"].nums],
-        "馬単オッズ(予想)": [0.75/p for p in baken["馬単"].prob.values()],
-        "馬単オッズ(今)": [baken["馬単"].odds[(no1, no2)] for no1, no2 in baken["馬単"].nums],
-        "馬単確率": [p for p in baken["馬単"].prob.values()]
+        "オッズ(予想)": [0.75/p for p in baken["馬単"].prob.values()],
+        "オッズ(今)": [baken["馬単"].odds[(no1, no2)] for no1, no2 in baken["馬単"].nums],
+        "確率": [p for p in baken["馬単"].prob.values()]
     })
     baken["馬連"].df = pd.DataFrame({
         "一位": [str(no1) for no1, no2 in baken["馬連"].nums],
         "二位": [str(no2) for no1, no2 in baken["馬連"].nums],
-        "馬連オッズ(予想)": [0.775/p for p in baken["馬連"].prob.values()],
-        "馬連オッズ(今)": [baken["馬連"].odds[(no1, no2)] for no1, no2 in baken["馬連"].nums],
-        "馬連確率": [p for p in baken["馬連"].prob.values()]
+        "オッズ(予想)": [0.775/p for p in baken["馬連"].prob.values()],
+        "オッズ(今)": [baken["馬連"].odds[(no1, no2)] for no1, no2 in baken["馬連"].nums],
+        "確率": [p for p in baken["馬連"].prob.values()]
     })
     baken["三連単"].df = pd.DataFrame({
         "一位": [str(no1) for no1, no2, no3 in baken["三連単"].nums],
         "二位": [str(no2) for no1, no2, no3 in baken["三連単"].nums],
         "三位": [str(no3) for no1, no2, no3 in baken["三連単"].nums],
-        "三連単オッズ(予想)": [0.725/p for p in baken["三連単"].prob.values()],
-        "三連単オッズ(今)": [baken["三連単"].odds[(no1, no2, no3)] for no1, no2, no3 in baken["三連単"].nums],
-        "三連単確率": [p for p in baken["三連単"].prob.values()]
+        "オッズ(予想)": [0.725/p for p in baken["三連単"].prob.values()],
+        "オッズ(今)": [baken["三連単"].odds[(no1, no2, no3)] for no1, no2, no3 in baken["三連単"].nums],
+        "確率": [p for p in baken["三連単"].prob.values()]
     })
     baken["三連複"].df = pd.DataFrame({
         "一位": [str(no1) for no1, no2, no3 in baken["三連複"].nums],
         "二位": [str(no2) for no1, no2, no3 in baken["三連複"].nums],
         "三位": [str(no3) for no1, no2, no3 in baken["三連複"].nums],
-        "三連複オッズ(予想)": [0.75/p for p in baken["三連複"].prob.values()],
-        "三連複オッズ(今)": [baken["三連複"].odds[(no1, no2, no3)] for no1, no2, no3 in baken["三連複"].nums],
-        "三連複確率": [p for p in baken["三連複"].prob.values()]
+        "オッズ(予想)": [0.75/p for p in baken["三連複"].prob.values()],
+        "オッズ(今)": [baken["三連複"].odds[(no1, no2, no3)] for no1, no2, no3 in baken["三連複"].nums],
+        "確率": [p for p in baken["三連複"].prob.values()]
     })
+    baken["三連複"].df.style.set_properties(subset=['text'], **{'width': '300px'})
 
     for b_type, b in baken.items():
-        b.df["期待値"] = b.df[f"{b_type}オッズ(今)"] * b.df[f"{b_type}確率"]
+        b.df["期待値"] = b.df["オッズ(今)"] * b.df["確率"]
         b.df["期待値"] = pd.Series([round(p, 2) for p in b.df["期待値"].values])
-        b.df[f"{b_type}確率"] = pd.Series([f"{p*100:.2f}%" for p in b.df[f"{b_type}確率"].values])
-        b.df[f"{b_type}オッズ(予想)"] = pd.Series([round(p, 1) for p in b.df[f"{b_type}オッズ(予想)"].values])
-        b.df["合成オッズ"] = pd.Series(cumulative_odds(b.df[f"{b_type}オッズ(今)"].values))
+        b.df["確率"] = pd.Series([f"{p*100:.2f}%" for p in b.df["確率"].values])
+        b.df["オッズ(予想)"] = pd.Series([round(p, 1) for p in b.df["オッズ(予想)"].values])
+        b.df["合成オッズ"] = pd.Series(cumulative_odds(b.df["オッズ(今)"].values))
         b.df["合成オッズ"] = pd.Series([round(p, 2) for p in b.df["合成オッズ"].values])
         b.df["累積確率"] = pd.Series([f"{p*100:.2f}%" for p in cumulative_prob(list(b.prob.values()))])
         b.df["合成期待値"] = b.df["合成オッズ"] * cumulative_prob(list(b.prob.values()))
@@ -191,5 +193,5 @@ if __name__ == "__main__":
     args = parse_args()
     horses = [horse for horse in netkeiba.scrape_shutuba(args.race_id)]
     df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
-    result = result_prob(df_original)
-    baken = baken_prob(result, args.race_id)
+    p = result_prob(df_original)
+    baken = baken_prob(p, df_original["name"].to_list(), args.race_id)

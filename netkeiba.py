@@ -29,6 +29,19 @@ COLUMNS = (
 # 130, 77, 51, 2020, 6, 1, 1,
 # 3, '1月19日(日)')
 
+PLACE = {
+    1: "札幌",
+    2: "函館",
+    3: "福島",
+    4: "新潟",
+    5: "東京",
+    6: "中山",
+    7: "中京",
+    8: "京都",
+    9: "阪神",
+    10: "小倉",
+}
+
 def date_type(date_str):
     return datetime.datetime.strptime(date_str, "%Y-%m")
 

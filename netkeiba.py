@@ -112,18 +112,26 @@ def scrape_shutuba(race_id):
             yield *shutuba_horse, racename, *racedata11, *racedata12, *racedata2, *racedata3, racedate
 
 @scraping
-def scrape_odds(driver, odds_url):
+def scrape_odds(driver, odds_url, convert_func=None):
+    @chrome.retry(10, verb=True)
+    def scrape_oddstable():
+        tables = soup(driver.page_source).find_all("table", class_="RaceOdds_HorseList_Table")
+        odds_list = text.extract_odds(tables[0])
+        if convert_func:
+            result = convert_func(odds_list)
+        else:
+            result = odds_list
+        return result
     print(f"scraping: {odds_url}")
     driver.get(odds_url)
     if driver.wait_all_elements():
-        tables = soup(driver.page_source).find_all("table", class_="RaceOdds_HorseList_Table")
-        odds_list = text.extract_odds(tables[0])
+        odds_list = scrape_oddstable()
         return odds_list
 
 def scrape_tanshou(driver, race_id):
     tanshou_url = f"{BASE_URL}/odds/index.html?race_id={race_id}"
-    odds_list = scrape_odds(driver, tanshou_url)
-    tanshou_odds = {int(no): float(odds) for pop, waku, no, _, name, odds, huku, _ in odds_list}
+    convert = lambda odds_list: {int(no): float(odds) for pop, waku, no, _, name, odds, huku, _ in odds_list}
+    tanshou_odds = scrape_odds(driver, tanshou_url, convert)
     return tanshou_odds
 
 @scraping

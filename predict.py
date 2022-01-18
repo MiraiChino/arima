@@ -170,6 +170,7 @@ def baken_prob(prob, race_id, top=30):
         b.df["期待値"] = pd.Series([round(p, 2) for p in b.df["期待値"].values])
         b.df[f"{b_type}確率"] = pd.Series([f"{p*100:.2f}%" for p in b.df[f"{b_type}確率"].values])
         b.df[f"{b_type}オッズ(予想)"] = pd.Series([round(p, 1) for p in b.df[f"{b_type}オッズ(予想)"].values])
+        b.df.index += 1
     return baken
 
 if __name__ == "__main__":

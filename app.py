@@ -5,15 +5,22 @@ import css
 import netkeiba
 import predict
 
+
 class DotDict(dict):
     def __init__(self, *args, **kwargs):
         super(DotDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
 
 def handler(event, context):
-    race_id = str(event.pathParameters.race_id)
-    if event and 'queryStringParameters' in event:
-        top = event['queryStringParameters'].get('top', 30)
+    if event and 'pathParameters' in event and 'race_id' in event["pathParameters"]:
+        race_id = str(event["pathParameters"]["race_id"])
+    else:
+        return {
+            "statusCode": 200,
+            "body": "No race_id"
+        }
+    if event and 'queryStringParameters' in event and 'top' in event["queryStringParameters"]:
+        top = event["queryStringParameters"]["top"]
     else:
         top = 30
 
@@ -53,4 +60,14 @@ def handler(event, context):
     }
 
 if __name__ == "__main__":
-    handler(None, None)
+    handler(
+        event={
+            "pathParameters": {
+                "race_id": "202106050811"
+            },
+            "queryStringParameters": {
+                "top": 30
+            }
+        },
+        context=None
+    )

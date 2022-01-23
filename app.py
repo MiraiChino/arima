@@ -60,7 +60,7 @@ def handler(event, context):
     }
 
 if __name__ == "__main__":
-    handler(
+    page = handler(
         event={
             "pathParameters": {
                 "race_id": "202106050811"
@@ -71,3 +71,4 @@ if __name__ == "__main__":
         },
         context=None
     )
+    render(page["body"], "response.html")

@@ -1,14 +1,17 @@
 # Byte-compiled / optimized / DLL files
-__pycache__/
+__pycache__
 
 # Jupyter Notebook
 .ipynb_checkpoints
 
 # Environments
-venv/
+venv
 
 .gitignore
 README.md
 train.py
 arima.ipynb
 netkeiba.sqlite
+Dockerfile
+docker-compose.yml
+docker-compose.deploy.yml

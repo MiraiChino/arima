@@ -6,8 +6,8 @@ services:
         dockerfile: Dockerfile
         target: dev
     ports:
-      - 9000:8080
+      - 8080:8080
     volumes:
-      - .:/var/task:rw,delegated
+      - .:/usr/workspace:rw,delegated
     shm_size: 2gb
-    command: app.handler
+    command: python app.py

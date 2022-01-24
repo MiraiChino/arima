@@ -1,20 +1,17 @@
 from contextlib import contextmanager
 from functools import wraps
-from pathlib import Path
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.select import Select
 from selenium.webdriver.support.ui import WebDriverWait
-from webdriver_manager.chrome import ChromeDriverManager
 
 
 class ChromeDriver(webdriver.Chrome):
 
-    def __init__(self, timeout=10, driver_path="/opt/chromedriver", chrome_path="/opt/chrome/chrome"):
+    def __init__(self, timeout=10):
         options = Options()
         options.add_argument("--headless")
         options.add_argument("--disable-gpu")
@@ -25,12 +22,7 @@ class ChromeDriver(webdriver.Chrome):
         options.add_argument("--no-zygote")
         options.add_argument("--single-process")
         self.wait = WebDriverWait(self, timeout)
-        if Path(driver_path).is_file() and Path(chrome_path).is_file():
-            options.binary_location = chrome_path
-            super().__init__(executable_path=driver_path, options=options)
-        else:
-            service = Service(ChromeDriverManager().install())
-            super().__init__(service=service, options=options)
+        super().__init__(options=options)
 
     def wait_all_elements(self):
         return self.wait.until(
@@ -75,5 +67,3 @@ def driver():
         yield chrome
     finally:
         chrome.quit()
-
-

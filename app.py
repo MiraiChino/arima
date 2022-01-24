@@ -1,29 +1,24 @@
 import pandas as pd
+import uvicorn
 from domonic.html import *
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 
 import css
 import netkeiba
 import predict
 
+app = FastAPI()
 
 class DotDict(dict):
     def __init__(self, *args, **kwargs):
         super(DotDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
 
-def handler(event, context):
-    if event and 'pathParameters' in event and 'race_id' in event["pathParameters"]:
-        race_id = str(event["pathParameters"]["race_id"])
-    else:
-        return {
-            "statusCode": 200,
-            "body": "No race_id"
-        }
-    if event and 'queryStringParameters' in event and 'top' in event["queryStringParameters"]:
-        top = event["queryStringParameters"]["top"]
-    else:
-        top = 30
-
+@app.get("/race/{race_id}", response_class=HTMLResponse)
+async def arima(race_id: str, top: int=30):
+    if not race_id:
+        return str(html(body(div(f"Invalid race_id: {race_id}"))))
     horses = [horse for horse in netkeiba.scrape_shutuba(race_id)]
     df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
     d = DotDict(df_original.loc[0, :].to_dict())
@@ -53,22 +48,7 @@ def handler(event, context):
         ),
         _lang="ja"
     ))
-    return {
-        "statusCode": 200,
-        "headers": {"Content-Type": "text/html"},
-        "body": page
-    }
+    return page
 
 if __name__ == "__main__":
-    page = handler(
-        event={
-            "pathParameters": {
-                "race_id": "202106050811"
-            },
-            "queryStringParameters": {
-                "top": 30
-            }
-        },
-        context=None
-    )
-    render(page["body"], "response.html")
+    uvicorn.run(app, debug=True, host="0.0.0.0", port=8080)

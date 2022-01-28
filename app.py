@@ -23,7 +23,8 @@ async def arima(race_id: str, top: int=30):
     df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
     d = DotDict(df_original.loc[0, :].to_dict())
     result_prob = predict.result_prob(df_original)
-    baken = predict.baken_prob(result_prob, df_original["name"].to_list(), race_id, top)
+    names = {no: name for no, name in zip(df_original["horse_no"].to_list(), df_original["name"].to_list())}
+    baken = predict.baken_prob(result_prob, names, race_id, top)
 
     page = str(html(
         head(

@@ -139,7 +139,7 @@ def baken_prob(prob, names, race_id, top=30):
 
     baken["単勝"].df = pd.DataFrame({
         "馬番": [str(no1) for no1 in baken["単勝"].nums],
-        "馬名": [name for name in names],
+        "馬名": [names[no] for no in baken["単勝"].nums],
         "オッズ(予想)": [0.8/p1 for p1 in baken["単勝"].prob.values()],
         "オッズ(今)": [baken["単勝"].odds[no1] for no1 in baken["単勝"].nums],
         "確率": [p1 for p1 in baken["単勝"].prob.values()]

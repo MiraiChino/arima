@@ -47,14 +47,14 @@ def p123(no1_index, no2_index, no3_index, probs, d=0.65):
     return *p12(no1_index, no2_index, probs), p3
 
 def p_sanrentan(a, b, c):
-    return a*b*c / ((1-a)*(1-b-c))
+    return a * b/(1-a) * c/(1-a-b)
 
 def p_sanrenpuku(a, b, c):
     return p_sanrentan(a,b,c) + p_sanrentan(a,c,b) + p_sanrentan(b,a,c) \
             + p_sanrentan(b,c,a) + p_sanrentan(c,a,b) + p_sanrentan(c,b,a)
 
 def p_umatan(a, b):
-    return a*b / (1-b)
+    return a * b/(1-a)
 
 def p_umaren(a, b):
     return p_umatan(a,b) + p_umatan(b,a)

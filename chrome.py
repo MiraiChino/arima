@@ -3,10 +3,12 @@ from functools import wraps
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.select import Select
 from selenium.webdriver.support.ui import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
 
 
 class ChromeDriver(webdriver.Chrome):
@@ -22,7 +24,8 @@ class ChromeDriver(webdriver.Chrome):
         options.add_argument("--no-zygote")
         options.add_argument("--single-process")
         self.wait = WebDriverWait(self, timeout)
-        super().__init__(options=options)
+        service = Service(ChromeDriverManager().install())
+        super().__init__(service=service, options=options)
 
     def wait_all_elements(self):
         return self.wait.until(

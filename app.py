@@ -16,7 +16,7 @@ class DotDict(dict):
         self.__dict__ = self
 
 @app.get("/race/{race_id}", response_class=HTMLResponse)
-async def arima(race_id: str, top: int=30):
+async def arima(race_id: str, top: int=100):
     if not race_id:
         return str(html(body(div(f"Invalid race_id: {race_id}"))))
     horses = [horse for horse in netkeiba.scrape_shutuba(race_id)]
@@ -38,6 +38,10 @@ async def arima(race_id: str, top: int=30):
             hr(),
             h3("単勝"),
             baken["単勝"].df.to_html(),
+            h3("複勝"),
+            baken["複勝"].df.to_html(),
+            h3("ワイド"),
+            baken["ワイド"].df.to_html(),
             h3("馬連"),
             baken["馬連"].df.to_html(),
             h3("馬単"),

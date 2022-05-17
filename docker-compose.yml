@@ -9,5 +9,5 @@ services:
       - 8080:8080
     volumes:
       - .:/usr/workspace:rw,delegated
-    shm_size: 2gb
+    shm_size: 8gb
     command: python app.py

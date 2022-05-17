@@ -147,8 +147,14 @@ def scrape_tanshou(driver, race_id):
     tanshou_odds = scrape_odds(driver, tanshou_url, convert)
     return tanshou_odds
 
+def scrape_hukushou(driver, race_id):
+    tanshou_url = f"{BASE_URL}/odds/index.html?race_id={race_id}"
+    convert = lambda odds_list: {int(no): round(sum(float(h) for h in huku.split('-'))/2, 1) for pop, waku, no, _, name, odds, huku, _ in odds_list}
+    hukushou_odds = scrape_odds(driver, tanshou_url, convert)
+    return hukushou_odds
+
 @scraping
-def scrape_12odds(driver, url):
+def scrape_12odds(driver, url, odds_convert=None):
     print(f"scraping: {url}")
     driver.get(url)
     umaren_odds = {}
@@ -158,7 +164,10 @@ def scrape_12odds(driver, url):
             col_label = table.find_element_by_css_selector("tr.col_label")
             no2 = int(text.remove_trash(col_label.text))
             odds_list = text.extract_odds(table.get_attribute("innerHTML"))
-            no12_odds += [(no2, int(no3), float(odds)) for no3, odds, _ in odds_list]
+            if odds_convert:
+                no12_odds += [(no2, int(no3), float(odds_convert(odds))) for no3, odds, _ in odds_list]
+            else:
+                no12_odds += [(no2, int(no3), float(odds)) for no3, odds, _ in odds_list]
         for no1, no2, odds in no12_odds:
             umaren_odds[(no1, no2)] = odds
     return umaren_odds
@@ -170,6 +179,11 @@ def scrape_umatan(driver, race_id):
 def scrape_umaren(driver, race_id):
     umaren_url = f"{BASE_URL}/odds/index.html?type=b4&race_id={race_id}&housiki=c0"
     return scrape_12odds(driver, umaren_url)
+
+def scrape_wide(driver, race_id):
+    wide_url = f"{BASE_URL}/odds/index.html?type=b5&race_id={race_id}&housiki=c0"
+    odds_convert = lambda odds: round(sum(float(o) for o in odds.split('-'))/2, 1)
+    return scrape_12odds(driver, wide_url, odds_convert)
 
 @scraping
 def scrape_ninki(driver, ninki_url, convert_func=None):
@@ -206,12 +220,15 @@ def daterange(from_date, to_date):
     to_date = date_type(to_date)
     if to_date < from_date:
         return
-    for month in range(from_date.month, 12+1):
-        yield from_date.year, month
-    for year in range(from_date.year+1, to_date.year):
-        for month in range(1, 12+1):
-            yield year, month
-    if from_date.year < to_date.year:
+    if from_date.year == to_date.year:
+        for month in range(from_date.month, to_date.month+1):
+            yield to_date.year, month
+    else:
+        for month in range(from_date.month, 12+1):
+            yield from_date.year, month
+        for year in range(from_date.year+1, to_date.year):
+            for month in range(1, 12+1):
+                yield year, month
         for month in range(1, to_date.month+1):
             yield to_date.year, month
 
@@ -219,10 +236,13 @@ if __name__ == "__main__":
     with chrome.driver() as driver:
         for year, month in daterange(config.from_date, config.to_date):
             horses = []
-            for race_date in scrape_racedates(year, month):
-                for race_id in scrape_raceids(driver, race_date):
-                    for horse in scrape_results(race_id):
-                        horses.append(horse)
+            try:
+                for race_date in scrape_racedates(year, month):
+                    for race_id in scrape_raceids(driver, race_date):
+                        for horse in scrape_results(race_id):
+                            horses.append(horse)
+            except Exception:
+                pass
             with sqlite3.connect(config.netkeiba_db) as conn:
                 df = pd.DataFrame(horses, columns=COLUMNS)
                 df.to_sql('horse', con=conn, if_exists='append', index=False)

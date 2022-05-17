@@ -12,6 +12,7 @@ import chrome
 import config
 import feature_extractor
 import netkeiba
+import utils
 
 
 def parse_args():
@@ -59,6 +60,22 @@ def p_umatan(a, b):
 def p_umaren(a, b):
     return p_umatan(a,b) + p_umatan(b,a)
 
+def p_wide(index1, index2, sanrentan_probs):
+    wide = 0
+    for (no1, no2, no3), prob in sanrentan_probs.items():
+        if (index1 == no1 and (index2 == no2 or index2 == no3)) or \
+            (index1 == no2 and (index2 == no1 or index2 == no3)) or \
+            (index1 == no3 and (index2 == no1 or index2 == no2)):
+            wide += prob
+    return wide
+
+def p_hukushou(index1, sanrentan_probs):
+    hukushou = 0
+    for (no1, no2, no3), prob in sanrentan_probs.items():
+        if index1 == no1 or index1 == no2 or index1 == no3:
+            hukushou += prob
+    return hukushou
+
 def synthetic_odds(odds):
     return 1 / sum(1/o for o in odds)
 
@@ -87,8 +104,19 @@ def result_prob(df):
         ave_time = {(f, d, fc): t for f, d, fc, t in df_avetime.to_dict(orient="split")["data"]}
         hist_pattern = config.hist_pattern
         feat_pattern = config.feature_pattern(ave_time)
-        for name in df_encoded["name"].unique():
-            df_agg = feature_extractor.search_history(name, df_encoded, hist_pattern, feat_pattern, conn)
+        race_date = df_encoded["race_date"][0]
+        condition = " OR ".join(f"{column}=={row[column]}" for _, row in df_encoded.iterrows() for column in feat_pattern.keys())
+        reader = pd.read_sql_query(f"SELECT * FROM horse WHERE race_date < '{race_date}' AND ({condition})", conn, chunksize=10000)
+        chunks = []
+        for df_chunk in reader:
+            df_chunk_reduced = utils.reduce_mem_usage(df_chunk, verbose=True)
+            chunks.append(df_chunk_reduced)
+        hist = pd.concat(chunks, ignore_index=True)
+        hist["race_date"] = pd.to_datetime(hist["race_date"])
+        hist = hist.sort_values("race_date")
+        hist = hist.loc[:, :'score']
+        for index, row in df_encoded.iterrows():
+            df_agg = feature_extractor.search_history(row, hist_pattern, feat_pattern, hist)
             df_feat = pd.concat([df_feat, df_agg])
     df_feat = df_feat.drop(columns=config.NONEED_COLUMNS)
 
@@ -105,14 +133,18 @@ def result_prob(df):
 def baken_prob(prob, names, race_id, top=30):
     baken = {
         "単勝": Baken(),
+        "複勝": Baken(),
         "馬単": Baken(),
         "馬連": Baken(),
+        "ワイド": Baken(),
         "三連単": Baken(),
         "三連複": Baken()
     }
     baken["単勝"].nums = list(prob.keys())
+    baken["複勝"].nums = list(prob.keys())
     baken["馬単"].nums = list(itertools.permutations(baken["単勝"].nums, 2))
     baken["馬連"].nums = list(itertools.combinations(baken["単勝"].nums, 2))
+    baken["ワイド"].nums = list(itertools.combinations(baken["単勝"].nums, 2))
     baken["三連単"].nums = list(itertools.permutations(baken["単勝"].nums, 3))
     baken["三連複"].nums = list(itertools.combinations(baken["単勝"].nums, 3))
     baken["単勝"].prob = {no1: p1(no1, prob) for no1 in baken["単勝"].nums}
@@ -120,7 +152,8 @@ def baken_prob(prob, names, race_id, top=30):
     baken["馬連"].prob = {tuple(sorted([no1, no2])): p_umaren(*p12(no1, no2, prob)) for no1, no2 in baken["馬連"].nums}
     baken["三連単"].prob = {(no1, no2, no3): p_sanrentan(*p123(no1, no2, no3, prob)) for no1, no2, no3 in baken["三連単"].nums}
     baken["三連複"].prob = {tuple(sorted([no1, no2, no3])): p_sanrenpuku(*p123(no1, no2, no3, prob)) for no1, no2, no3 in baken["三連複"].nums}
-    
+    baken["複勝"].prob = {no1: p_hukushou(no1, baken["三連単"].prob) for no1 in baken["複勝"].nums}
+    baken["ワイド"].prob = {(no1, no2): p_wide(no1, no2, baken["三連単"].prob) for no1, no2 in baken["ワイド"].nums}
     for b_type, b in baken.items():
         high_probs = sorted(b.prob.items(), key=lambda x: x[1], reverse=True)[:top]
         baken[b_type].nums = [i for i, _ in high_probs]
@@ -128,21 +161,36 @@ def baken_prob(prob, names, race_id, top=30):
 
     with chrome.driver() as driver:
         baken["単勝"].odds = netkeiba.scrape_tanshou(driver, race_id)
+        baken["複勝"].odds = netkeiba.scrape_hukushou(driver, race_id)
         baken["馬単"].odds = netkeiba.scrape_umatan(driver, race_id)
         baken["馬連"].odds = netkeiba.scrape_umaren(driver, race_id)
+        baken["ワイド"].odds = netkeiba.scrape_wide(driver, race_id)
         sanrentan_odds_gen = netkeiba.scrape_sanrentan_generator(driver, race_id)
         sanrenpuku_odds_gen = netkeiba.scrape_sanrenpuku_generator(driver, race_id)
         while not tuples1_in_tuples2(baken["三連単"].nums[:top], list(baken["三連単"].odds.keys())):
-            baken["三連単"].odds |= next(sanrentan_odds_gen)
+            try:
+                baken["三連単"].odds |= next(sanrentan_odds_gen)
+            except StopIteration:
+                pass
         while not tuples1_in_tuples2(baken["三連複"].nums[:top], list(baken["三連複"].odds.keys())):
-            baken["三連複"].odds |= next(sanrenpuku_odds_gen)
+            try:
+                baken["三連複"].odds |= next(sanrenpuku_odds_gen)
+            except StopIteration:
+                pass
 
     baken["単勝"].df = pd.DataFrame({
         "馬番": [str(no1) for no1 in baken["単勝"].nums],
-        "馬名": [names[no] for no in baken["単勝"].nums],
+        "馬名": [names[no-1] for no in baken["単勝"].nums],
         "オッズ(予想)": [0.8/p1 for p1 in baken["単勝"].prob.values()],
         "オッズ(今)": [baken["単勝"].odds[no1] for no1 in baken["単勝"].nums],
         "確率": [p1 for p1 in baken["単勝"].prob.values()]
+    })
+    baken["複勝"].df = pd.DataFrame({
+        "馬番": [str(no1) for no1 in baken["複勝"].nums],
+        "馬名": [names[no-1] for no in baken["複勝"].nums],
+        "オッズ(予想)": [0.8/p1 for p1 in baken["複勝"].prob.values()],
+        "オッズ(今)": [baken["複勝"].odds[no1] for no1 in baken["複勝"].nums],
+        "確率": [p1 for p1 in baken["複勝"].prob.values()]
     })
     baken["馬単"].df = pd.DataFrame({
         "一位": [str(no1) for no1, no2 in baken["馬単"].nums],
@@ -157,6 +205,13 @@ def baken_prob(prob, names, race_id, top=30):
         "オッズ(予想)": [0.775/p for p in baken["馬連"].prob.values()],
         "オッズ(今)": [baken["馬連"].odds[(no1, no2)] for no1, no2 in baken["馬連"].nums],
         "確率": [p for p in baken["馬連"].prob.values()]
+    })
+    baken["ワイド"].df = pd.DataFrame({
+        "一位": [str(no1) for no1, no2 in baken["ワイド"].nums],
+        "二位": [str(no2) for no1, no2 in baken["ワイド"].nums],
+        "オッズ(予想)": [0.775/p for p in baken["ワイド"].prob.values()],
+        "オッズ(今)": [baken["ワイド"].odds[(no1, no2)] for no1, no2 in baken["ワイド"].nums],
+        "確率": [p for p in baken["ワイド"].prob.values()]
     })
     baken["三連単"].df = pd.DataFrame({
         "一位": [str(no1) for no1, no2, no3 in baken["三連単"].nums],
@@ -193,5 +248,10 @@ if __name__ == "__main__":
     args = parse_args()
     horses = [horse for horse in netkeiba.scrape_shutuba(args.race_id)]
     df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
+    print(df_original)
     p = result_prob(df_original)
+    print(p)
     baken = baken_prob(p, df_original["name"].to_list(), args.race_id)
+    for b_type, b in baken.items():
+        print(b_type)
+        print(b.df)

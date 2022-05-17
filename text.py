@@ -7,6 +7,7 @@ li = re.compile(r"</li>")
 tr = re.compile(r"</tr>")
 td = re.compile(r"</td>")
 tag = re.compile(r"<[^>]*?>")
+hyphen = re.compile(r"<spanclass=\"Hyphen\"id=\"odds_min_Hyphen\"style=\"\"></span>")
 bracket_l = re.compile(r"\[")
 bracket_r = re.compile(r"\]")
 racedata11 = re.compile(r"(.+)発走/(.)(\d+)m.*\((.*)\)")
@@ -106,9 +107,10 @@ def extract_shutuba(text):
 
 def extract_odds(text):
     text = remove_trash(text)
-    text = tr.sub("@" ,text)
-    text = td.sub("," ,text)
-    text = li.sub("-" ,text)
+    text = hyphen.sub("-", text)
+    text = tr.sub("@", text)
+    text = td.sub(",", text)
+    text = li.sub("$" ,text)
     text = tag.sub("", text)
     text = bracket_l.sub("", text)
     text = bracket_r.sub("", text)
@@ -117,4 +119,4 @@ def extract_odds(text):
     return results
 
 def split_rentan(text):
-    return tuple(int(n) for n in text[:-1].split("--"))
+    return tuple(int(n) for n in text[:-1].split("$$"))

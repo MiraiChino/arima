@@ -1,4 +1,3 @@
-import copy
 import sqlite3
 
 import dill as pickle
@@ -49,23 +48,27 @@ def extract_samevalue(a, target_index):
         extracted_nparray = a[np.where(a[:, target_index] == value)]
         yield value, extracted_nparray
 
-def agg_history(funcs, hist_pattern, horse_history, index):
+def agg_history_i(i, funcs, hist_pattern, history, index):
     no_hist = np.empty((len(funcs)*len(hist_pattern),))
     no_hist[:] = np.nan
+    row = history[i, :]
+    past_rows = history[:, index("race_date")] < row[index("race_date")]
+    past_hist = history[np.where(past_rows)][::-1]
+    if past_hist.any():
+        try:
+            last_jrace_fresult = np.array([f(past_hist[:1+j, :], row, index) for f in funcs for j in hist_pattern])
+            return last_jrace_fresult
+        except Exception as e:
+            print(e)
+            return no_hist
+    else:
+        return no_hist
+
+def agg_history(funcs, hist_pattern, history, index):
     result = []
-    for i in range(0, len(horse_history)):
-        row = horse_history[i, :]
-        past_rows = horse_history[:, index("race_date")] < row[index("race_date")]
-        past_hist = horse_history[np.where(past_rows)][::-1]
-        if past_hist.any():
-            try:
-                last_jrace_fresult = np.array([f(past_hist[:j, :], row, index) for f in funcs for j in hist_pattern])
-                result.append(last_jrace_fresult)
-            except Exception as e:
-                print(e)
-                result.append(no_hist)
-        else:
-            result.append(no_hist)
+    for i in range(0, len(history)):
+        history_i = agg_history_i(i, funcs, hist_pattern, history, index)
+        result.append(history_i)
     return np.array(result)
 
 def df2np(df):
@@ -74,35 +77,36 @@ def df2np(df):
     index = lambda x: columns.index(x)
     return a, columns, index
 
-def yield_history_aggdf(df, hist_pattern, feat_pattern):
+def yield_history_aggdf(df, target, hist_pattern, feat_pattern):
     funcs = list(feat_pattern.values())
     past_columns = [f"{col}_{x}" for col in list(feat_pattern.keys()) for x in hist_pattern]
     a, columns, index = df2np(df)
 
-    for name, hist in extract_samevalue(a, target_index=index("name")):
+    for name, hist in extract_samevalue(a, target_index=index(target)):
         a_agghist = agg_history(funcs, hist_pattern, hist, index)
         hist_df = pd.DataFrame(np.concatenate([hist, a_agghist], axis=1), columns=columns+past_columns)
         yield name, hist_df
 
-def search_history(name, df_encoded, hist_pattern, feat_pattern, feature_db):
-    funcs = list(feat_pattern.values())
-    past_columns = [f"{col}_{x}" for col in list(feat_pattern.keys()) for x in hist_pattern]
+def search_history(target_row, hist_pattern, feat_pattern, df):
+    row_df = pd.DataFrame([target_row]).reset_index()
+    if "id" not in row_df.columns:
+        row_df["id"] = None
+    if "index" not in row_df.columns:
+        row_df["index"] = None
+    hist_df = row_df.copy(deep=True)
+    condition = " or ".join(f"{column}=={target_row[column]}" for column in feat_pattern.keys())
+    condition_df = df.query(condition)
 
-    hist = pd.read_sql_query(f"SELECT * FROM horse WHERE name=={name}", feature_db)
-    hist["race_date"] = pd.to_datetime(hist["race_date"])
-    hist = hist.sort_values("race_date")
-    hist = hist.loc[:, :'score']
-
-    row_target = copy.deepcopy(df_encoded[df_encoded["name"] == name])
-    if "id" not in row_target.columns:
-        row_target["id"] = None
-    if "index" not in row_target.columns:
-        row_target["index"] = None
-    hist = pd.concat([hist, row_target])
-    a, columns, index = df2np(hist)
-    a_agghist = agg_history(funcs, hist_pattern, a, index)
-    hist_df = pd.DataFrame(np.concatenate([hist, a_agghist], axis=1), columns=columns+past_columns)
-    return hist_df.tail(1)
+    for column in feat_pattern.keys():
+        funcs = list(feat_pattern[column].values())
+        past_columns = [f"{col}_{x}" for col in list(feat_pattern[column].keys()) for x in hist_pattern]
+        hist = condition_df.query(f"{column}=={target_row[column]}")
+        hist = pd.concat([hist, row_df])
+        a, columns, index = df2np(hist)
+        targetrow_agg = agg_history_i(len(a)-1, funcs, hist_pattern, a, index)
+        row_df_column = pd.DataFrame([targetrow_agg], columns=past_columns)
+        hist_df = pd.concat([hist_df, row_df_column], axis="columns")
+    return hist_df
 
 def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"):
     with sqlite3.connect(input_db) as conn:
@@ -124,19 +128,27 @@ def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"
     with sqlite3.connect(output_db) as conn:
         df_avetime.to_sql("ave_time", conn, if_exists="replace", index=False)
 
-    hist_df_list = []
-    for name, hist_df in yield_history_aggdf(df_encoded, hist_pattern, feat_pattern):
-        print("\r"+str(name),end="")
-        hist_df_list.append(hist_df)
-    df_feat = pd.concat(hist_df_list)
-    df_feat = df_feat.sort_values("id").reset_index()
-    df_feat = pd.concat([df.sort_values("horse_no") for _, df in df_feat.groupby(config.RACE_COLUMNS)])
+    cols = list(feat_pattern.keys())
+    df_feats = {}
+    for column in cols:
+        hist_list = []
+        for name, hist_df in yield_history_aggdf(df_encoded, column, hist_pattern, feat_pattern[column]):
+            print(f"\r{column}:{name}", end="")
+            hist_list.append(hist_df)
+        df_feats[column] = pd.concat(hist_list)
+        df_feats[column] = df_feats[column].sort_values("id").reset_index()
+        df_feats[column] = pd.concat([df.sort_values("horse_no") for _, df in df_feats[column].groupby(config.RACE_COLUMNS)])
+    
+    df_feat = df_feats[cols[0]]
+    for column in cols[1:]:
+        cols_to_use = df_feats[column].columns.difference(df_feat.columns).tolist() + ["id"]
+        df_feat = pd.merge(df_feat, df_feats[column][cols_to_use], on="id")
     with sqlite3.connect(output_db) as conn:
         df_feat.to_sql("horse", conn, if_exists="replace", index=False)
 
 if __name__ == "__main__":
     prepare(
-        output_db=config.feat_db, 
-        input_db=config.netkeiba_db, 
-        encoder_file=config.encoder_file, 
+        output_db=config.feat_db,
+        input_db=config.netkeiba_db,
+        encoder_file=config.encoder_file,
     )

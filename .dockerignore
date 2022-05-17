@@ -11,7 +11,7 @@ venv
 README.md
 train.py
 arima.ipynb
-netkeiba.sqlite
+netkeiba20220508.sqlite
 Dockerfile
 docker-compose.yml
 docker-compose.deploy.yml

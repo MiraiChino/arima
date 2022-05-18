@@ -83,8 +83,20 @@ def feature_pattern(ave_time):
     }
 
 # train
-train_query = "'2008-01-01' <= race_date <= '2018-12-31'"
-valid_query = "'2019-01-01' <= race_date <= '2022-05-08'"
+splits = [
+    dict(
+        train="'2008-01-01' <= race_date <= '2012-12-31'",
+        valid="'2013-01-01' <= race_date <= '2015-12-31'"
+    ),
+    dict(
+        train="'2008-01-01' <= race_date <= '2015-12-31'",
+        valid="'2016-01-01' <= race_date <= '2018-12-31'"
+    ),
+    dict(
+        train="'2008-01-01' <= race_date <= '2018-12-31'",
+        valid="'2019-01-01' <= race_date <= '2022-05-08'"
+    ),
+]
 
 rank_file = "rank_model20220508.pickle"
 rank_target = "score"

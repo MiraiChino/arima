@@ -121,7 +121,8 @@ def result_prob(df):
     df_feat = df_feat.drop(columns=config.NONEED_COLUMNS)
 
     probs = []
-    for model_file in (config.rank_file, config.reg_file):
+    model_files = [f"{i}_{file}" for file in (config.rank_file, config.reg_file) for i in range(len(config.splits))]
+    for model_file in model_files:
         with open(model_file, "rb") as f:
             model = pickle.load(f)
             pred = model.predict(df_feat.values, num_iteration=model.best_iteration)

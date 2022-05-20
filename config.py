@@ -4,8 +4,8 @@ to_date = "2022-05"
 netkeiba_db = "netkeiba20220508.sqlite"
 
 # feature extraction
-encoder_file = "encoder20220508.pickle"
-feat_db = "feature20220508.sqlite"
+encoder_file = "encoder20220508v2.pickle"
+feat_db = "feature20220508v2.sqlite"
 
 NONEED_COLUMNS = [
     "id", "index", "result", "time", "margin", "pop", "odds", "last3f", \
@@ -15,22 +15,19 @@ NONEED_COLUMNS = [
 ]
 RACE_COLUMNS = ["year", "place_code", "hold_num", "day_num", "race_num"]
 
-hist_pattern = [1, 2, 3, 4, 5, 10, 999999]
+hist_pattern = [1, 2, 3, 10, 999999]
 
 def feature_pattern(ave_time):
-    from feature_extractor import ave, diff, interval, same_count, time
+    from feature_extractor import (ave, distance_prize, interval, same_ave,
+                                   same_count, same_drize, time)
     return {
         "name": {
             "horse_interval": interval,
-            "horse_place": same_count("place_code"),
             "horse_odds": ave("odds"),
             "horse_pop": ave("pop"),
             "horse_result": ave("result"),
-            "horse_jockey": same_count("jockey"),
             "horse_penalty": ave("penalty"),
-            "horse_distance": diff("distance"),
             "horse_weather": same_count("weather"),
-            "horse_fc": same_count("field_condition"),
             "horse_time": time(ave_time),
             "horse_margin": ave("margin"),
             "horse_corner3": ave("corner3"),
@@ -39,46 +36,88 @@ def feature_pattern(ave_time):
             "horse_weight": ave("weight"),
             "horse_wc": ave("weight_change"),
             "horse_prize": ave("prize"),
+            "horse_pprize": same_ave("place_code", target="prize"),
+            "horse_dprize": same_ave("distance", target="prize"),
+            "horse_fprize": same_ave("field", target="prize"),
+            "horse_cprize": same_ave("field_condition", target="prize"),
+            "horse_tprize": same_ave("turn", target="prize"),
+            "horse_jprize": same_ave("jockey", target="prize"),
+            "horse_ftprize": same_ave("field", "turn", target="prize"),
+            "horse_fdprize": same_ave("field", "distance", target="prize"),
+            "horse_fcprize": same_ave("field", "field_condition", target="prize"),
+            "horse_pfprize": same_ave("place_code", "field", target="prize"),
+            "horse_pdprize": same_ave("place_code", "distance", target="prize"),
+            "horse_pftprize": same_ave("place_code", "field", "turn", target="prize"),
+            "horse_pfdprize": same_ave("place_code", "field", "distance", target="prize"),
+            "horse_pfcprize": same_ave("place_code", "field", "field_condition", target="prize"),
+            "horse_dfcprize": same_ave("distance", "field", "field_condition", target="prize"),
+            "horse_pfdcprize": same_ave("place_code", "field", "distance", "field_condition", target="prize"),
+            "horse_pfdtprize": same_ave("place_code", "field", "distance", "turn", target="prize"),
+            "horse_drize": distance_prize(),
+            "horse_pdrize": same_drize("place_code"),
+            "horse_fdrize": same_drize("field"),
+            "horse_cdrize": same_drize("field_condition"),
+            "horse_tdrize": same_drize("turn"),
+            "horse_jdrize": same_drize("jockey"),
+            "horse_ftdrize": same_drize("field", "turn"),
+            "horse_fcdrize": same_drize("field", "field_condition"),
+            "horse_pfdrize": same_drize("place_code", "field"),
+            "horse_pftdrize": same_drize("place_code", "field", "turn"),
+            "horse_pfcdrize": same_drize("place_code", "field", "field_condition"),
+            "horse_pfctdrize": same_drize("place_code", "field", "field_condition", "turn"),
         },
         "jockey": {
             "jockey_interval": interval,
-            "jockey_place": same_count("place_code"),
             "jockey_odds": ave("odds"),
             "jockey_pop": ave("pop"),
             "jockey_result": ave("result"),
-            "jockey_horse": same_count("name"),
-            "jockey_penalty": ave("penalty"),
-            "jockey_distance": diff("distance"),
             "jockey_weather": same_count("weather"),
-            "jockey_fc": same_count("field_condition"),
             "jockey_time": time(ave_time),
             "jockey_margin": ave("margin"),
             "jockey_corner3": ave("corner3"),
             "jockey_corner4": ave("corner4"),
             "jockey_last3f": ave("last3f"),
-            "jockey_weight": ave("weight"),
-            "jockey_wc": ave("weight_change"),
             "jockey_prize": ave("prize"),
+            "jockey_pprize": same_ave("place_code", target="prize"),
+            "jockey_dprize": same_ave("distance", target="prize"),
+            "jockey_fprize": same_ave("field", target="prize"),
+            "jockey_cprize": same_ave("field_condition", target="prize"),
+            "jockey_tprize": same_ave("turn", target="prize"),
+            "jockey_ftprize": same_ave("field", "turn", target="prize"),
+            "jockey_fdprize": same_ave("field", "distance", target="prize"),
+            "jockey_fcprize": same_ave("field", "field_condition", target="prize"),
+            "jockey_pfprize": same_ave("place_code", "field", target="prize"),
+            "jockey_pdprize": same_ave("place_code", "distance", target="prize"),
+            "jockey_pftprize": same_ave("place_code", "field", "turn", target="prize"),
+            "jockey_pfdprize": same_ave("place_code", "field", "distance", target="prize"),
+            "jockey_pfcprize": same_ave("place_code", "field", "field_condition", target="prize"),
+            "jockey_dfcprize": same_ave("distance", "field", "field_condition", target="prize"),
+            "jockey_pfdcprize": same_ave("place_code", "field", "distance", "field_condition", target="prize"),
+            "jockey_pfdtprize": same_ave("place_code", "field", "distance", "turn", target="prize"),
         },
         "barn": {
             "barn_interval": interval,
-            "barn_place": same_count("place_code"),
             "barn_odds": ave("odds"),
             "barn_pop": ave("pop"),
             "barn_result": ave("result"),
-            "barn_horse": same_count("name"),
-            "barn_penalty": ave("penalty"),
-            "barn_distance": diff("distance"),
-            "barn_weather": same_count("weather"),
-            "barn_fc": same_count("field_condition"),
             "barn_time": time(ave_time),
             "barn_margin": ave("margin"),
             "barn_corner3": ave("corner3"),
             "barn_corner4": ave("corner4"),
             "barn_last3f": ave("last3f"),
-            "barn_weight": ave("weight"),
-            "barn_wc": ave("weight_change"),
             "barn_prize": ave("prize"),
+            "barn_pprize": same_ave("place_code", target="prize"),
+            "barn_dprize": same_ave("distance", target="prize"),
+            "barn_fprize": same_ave("field", target="prize"),
+            "barn_cprize": same_ave("field_condition", target="prize"),
+            "barn_fdprize": same_ave("field", "distance", target="prize"),
+            "barn_fcprize": same_ave("field", "field_condition", target="prize"),
+            "barn_pfprize": same_ave("place_code", "field", target="prize"),
+            "barn_pdprize": same_ave("place_code", "distance", target="prize"),
+            "barn_pfdprize": same_ave("place_code", "field", "distance", target="prize"),
+            "barn_pfcprize": same_ave("place_code", "field", "field_condition", target="prize"),
+            "barn_dfcprize": same_ave("distance", "field", "field_condition", target="prize"),
+            "barn_pfdcprize": same_ave("place_code", "field", "distance", "field_condition", target="prize"),
         },
     }
 
@@ -98,7 +137,7 @@ splits = [
     ),
 ]
 
-rank_file = "rank_model20220508.pickle"
+rank_file = "rank_model20220508v2.pickle"
 rank_target = "score"
 rank_params = {
     "objective": "lambdarank",
@@ -109,7 +148,7 @@ rank_params = {
     "learning_rate": 0.01,
 }
 
-reg_file = "reg_model20220508.pickle"
+reg_file = "reg_model20220508v2.pickle"
 reg_target = "prize"
 reg_params = {
     'objective': 'regression',

@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 import config
+import utils
 from encoder import HorseEncoder
 
 
@@ -26,14 +27,53 @@ def diff(column):
         return (history[:, index(column)] - now[index(column)]).mean()
     return wrapper
 
+def same_ave(*same_columns, target="prize"):
+    def wrapper(history, now, index):
+        i1 = index(target)
+        same_conditions = [(history[:, index(c)] == now[index(c)]) for c in same_columns]
+        same_hist = history[np.logical_and.reduce(same_conditions)]
+        if same_hist.any():
+            prizes = same_hist[:, i1]
+            return prizes.mean()
+        else:
+            return 0
+    return wrapper
+
+def drize(distance, prize, now_distance):
+    return (1 - abs(distance - now_distance) / now_distance) * prize
+
+def distance_prize():
+    def wrapper(history, now, index):
+        i1 = index("distance")
+        distances = history[:, i1]
+        prizes = history[:, index("prize")]
+        dprizes = np.vectorize(drize)(distances, prizes, now[i1])
+        return np.mean(dprizes)
+    return wrapper
+
+def same_drize(*same_columns):
+    def wrapper(history, now, index):
+        i1 = index("distance")
+        same_conditions = [(history[:, index(c)] == now[index(c)]) for c in same_columns]
+        same_hist = history[np.logical_and.reduce(same_conditions)]
+        if same_hist.any():
+            distances = same_hist[:, i1]
+            prizes = same_hist[:, index("prize")]
+            dprizes = np.vectorize(drize)(distances, prizes, now[i1])
+            return np.mean(dprizes)
+        else:
+            return 0
+    return wrapper
+
 def calc_ave_time(df):
     return {key: race["time"].mean() for key, race in df.groupby(["field", "distance", "field_condition"])}
 
+def average_time(time, f, d, fc, ave):
+    a = ave[(f, d, fc)]
+    return (time - a) / a
+
 def time(ave):
     def wrapper(history, now, index):
-        def average_time(time, f, d, fc, ave):
-            a = ave[(f, d, fc)]
-            return (time - a) / a
         ht = history[:, index("time")]
         hf = history[:, index("field")]
         hd = history[:, index("distance")]
@@ -110,7 +150,13 @@ def search_history(target_row, hist_pattern, feat_pattern, df):
 
 def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"):
     with sqlite3.connect(input_db) as conn:
-        df_original = pd.read_sql_query("SELECT * FROM horse", conn)
+        reader = pd.read_sql_query("SELECT * FROM horse", conn, chunksize=10000)
+        chunks = []
+        for i, df in enumerate(reader):
+            print(i+1, df.shape)
+            df_chunk = utils.reduce_mem_usage(df)
+            chunks.append(df_chunk)
+        df_original = pd.concat(chunks, ignore_index=True)
         if "index" in df_original.columns:
             df_original = df_original.drop(columns="index")
         df_original["id"] = df_original.index
@@ -118,6 +164,7 @@ def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"
     horse_encoder = HorseEncoder()
     df_format = horse_encoder.format(df_original)
     df_encoded = horse_encoder.fit_transform(df_format)
+    df_encoded = utils.reduce_mem_usage(df_encoded)
     with open(encoder_file, "wb") as f:
         pickle.dump(horse_encoder, f)
 
@@ -138,7 +185,7 @@ def prepare(output_db, input_db="netkeiba.sqlite", encoder_file="encoder.pickle"
         df_feats[column] = pd.concat(hist_list)
         df_feats[column] = df_feats[column].sort_values("id").reset_index()
         df_feats[column] = pd.concat([df.sort_values("horse_no") for _, df in df_feats[column].groupby(config.RACE_COLUMNS)])
-    
+        df_feats[column] = utils.reduce_mem_usage(df_feats[column])
     df_feat = df_feats[cols[0]]
     for column in cols[1:]:
         cols_to_use = df_feats[column].columns.difference(df_feat.columns).tolist() + ["id"]

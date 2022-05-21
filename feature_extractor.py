@@ -66,14 +66,13 @@ def same_drize(*same_columns):
     return wrapper
 
 def calc_ave_time(df):
-    return {key: race["time"].mean() for key, race in df.groupby(["field", "distance", "field_condition"])}
-
-def average_time(time, f, d, fc, ave):
-    a = ave[(f, d, fc)]
-    return (time - a) / a
+    return {key: race["time"].astype(float).mean() for key, race in df.groupby(["field", "distance", "field_condition"])}
 
 def time(ave):
     def wrapper(history, now, index):
+        def average_time(time, f, d, fc, ave):
+            a = ave[(f, d, fc)]
+            return (time - a) / a
         ht = history[:, index("time")]
         hf = history[:, index("field")]
         hd = history[:, index("distance")]

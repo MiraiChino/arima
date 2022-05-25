@@ -181,14 +181,14 @@ def baken_prob(prob, names, race_id, top=30):
 
     baken["単勝"].df = pd.DataFrame({
         "馬番": [str(no1) for no1 in baken["単勝"].nums],
-        "馬名": [names[no-1] for no in baken["単勝"].nums],
+        "馬名": [names[no] for no in baken["単勝"].nums],
         "オッズ(予想)": [0.8/p1 for p1 in baken["単勝"].prob.values()],
         "オッズ(今)": [baken["単勝"].odds[no1] for no1 in baken["単勝"].nums],
         "確率": [p1 for p1 in baken["単勝"].prob.values()]
     })
     baken["複勝"].df = pd.DataFrame({
         "馬番": [str(no1) for no1 in baken["複勝"].nums],
-        "馬名": [names[no-1] for no in baken["複勝"].nums],
+        "馬名": [names[no] for no in baken["複勝"].nums],
         "オッズ(予想)": [0.8/p1 for p1 in baken["複勝"].prob.values()],
         "オッズ(今)": [baken["複勝"].odds[no1] for no1 in baken["複勝"].nums],
         "確率": [p1 for p1 in baken["複勝"].prob.values()]
@@ -252,7 +252,8 @@ if __name__ == "__main__":
     print(df_original)
     p = result_prob(df_original)
     print(p)
-    baken = baken_prob(p, df_original["name"].to_list(), args.race_id)
+    names = {no: name for no, name in zip(df_original["horse_no"].to_list(), df_original["name"].to_list())}
+    baken = baken_prob(p, names, args.race_id)
     for b_type, b in baken.items():
         print(b_type)
         print(b.df)

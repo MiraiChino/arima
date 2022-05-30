@@ -113,6 +113,7 @@ def result_prob(df, task_logs=[]):
     df_format = netkeiba_encoder.format(df)
     df_encoded = netkeiba_encoder.transform(df_format)
     df_feat = pd.DataFrame()
+    task_logs.append(f"connecting {config.feat_db}")
     with sqlite3.connect(config.feat_db) as conn:
         df_avetime = pd.read_sql_query(f"SELECT * FROM ave_time", conn)
         ave_time = {(f, d, fc): t for f, d, fc, t in df_avetime.to_dict(orient="split")["data"]}
@@ -135,7 +136,6 @@ def result_prob(df, task_logs=[]):
         hist = hist.sort_values("race_date")
         hist = hist.loc[:, :'score']
         for index, row in df_encoded.iterrows():
-            task_logs.append(f"calculating feature of horse{row['horse_no']} from history")
             df_agg = feature_extractor.search_history(row, hist_pattern, feat_pattern, hist)
             df_feat = pd.concat([df_feat, df_agg])
     df_feat = df_feat.drop(columns=config.NONEED_COLUMNS)
@@ -144,7 +144,7 @@ def result_prob(df, task_logs=[]):
     model_files = [f"{i}_{file}" for file in (config.rank_file, config.reg_file) for i in range(len(config.splits))]
     for model_file in model_files:
         with open(model_file, "rb") as f:
-            task_logs.append(f"predicting race result with {model_file}")
+            task_logs.append(f"predicting: with {model_file}")
             model = pickle.load(f)
             pred = model.predict(df_feat.values, num_iteration=model.best_iteration)
             pred_prob = probability(pred)

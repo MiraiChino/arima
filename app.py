@@ -19,46 +19,67 @@ class DotDict(dict):
 
 class PredictAndDumpBaken():
     logs = []
+    race_id = 'no_id'
 
     def __call__(self, race_id):
+        self.race_id = race_id
         self.logs.append(f"-- START")
         self.logs.append(f"race_id: {race_id}")
         baken_pickle = pathlib.Path(f"{race_id}.pickle")
         try:
             if not race_id:
-                self.logs.append(f"Invalid race_id")
+                self.logs.append(f"Invalid race_id.")
                 self.logs.append(f"-- DONE")
                 return
             if baken_pickle.is_file():
-                self.logs.append(f"Already {baken_pickle} exists")
+                self.logs.append(f"Already {baken_pickle} exists.")
                 self.logs.append(f"-- DONE")
                 return
-            self.logs.append(f"scraping shutsuba horse")
+            self.logs.append(f"scraping: https://race.netkeiba.com/race/shutuba.html?race_id={race_id}")
             horses = [horse for horse in netkeiba.scrape_shutuba(race_id)]
             df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
             race_info = DotDict(df_original.loc[0, :].to_dict())
-            self.logs.append("start to prepare for predicting race results")
             result_prob = predict.result_prob(df_original, task_logs=self.logs)
             names = {no: name for no, name in zip(df_original["horse_no"].to_list(), df_original["name"].to_list())}
-            self.logs.append(f"predicting baken probabilities")
+            self.logs.append(f"predicting: 単勝 複勝 ワイド 馬連 馬単 三連複 三連単")
             baken = predict.baken_prob(result_prob, names)
             with open(baken_pickle, 'wb') as f:
                 pickle.dump((baken, race_info), f)
             self.logs.append(f"{baken_pickle} saved")
         except Exception as e:
             self.logs.append(f"{e}")
-        self.logs.append(f"-- DONE")
+        finally:
+            self.logs.append(f"-- DONE")
     
     def get_logs(self):
         return self.logs
+
+    def init(self):
+        self.logs = []
+        self.race_id = "no_id"
+
+    def is_doing(self):
+        if self.logs and self.logs[-1] != "-- DONE":
+            return True
+        else:
+            return False
+    
+    def get_raceid(self):
+        return self.race_id
 
 app = FastAPI()
 task = PredictAndDumpBaken()
 
 @app.get("/predict/{race_id}")
 def predict_race(race_id: str, background_tasks: BackgroundTasks):
-    background_tasks.add_task(task, race_id)
-    return {"message": f"race_id {race_id}: start to predict race result"}
+    if task.is_doing():
+        return {"message": f"Already race_id {task.get_raceid()} is doing."}
+    elif pathlib.Path(f"{race_id}.pickle").is_file():
+        return {"message": f"Already {race_id}.pickle exists. Go /result/{race_id}."}
+    else:
+        task.init()
+        background_tasks.add_task(task, race_id)
+        return {"message": f"race_id {race_id}: Added task of predicting race result."}
 
 @app.get("/status/{race_id}", response_class=HTMLResponse)
 def log(race_id: str):
@@ -74,6 +95,8 @@ def race_html(race_id: str, top: int=100, odd_th=2.0):
     if baken_pickle.is_file():
         with open(baken_pickle, 'rb') as f:
             baken, r = pickle.load(f)
+    elif task.is_doing():
+        return str(html(body(div(f"Please Wait: Now predicting race_id {task.get_raceid()} result."))))
     else:
         return str(html(body(div(f"Error: Did not find {baken_pickle}. Need to access /predict/{race_id} first."))))
     baken = predict.calc_odds(baken, race_id, top)

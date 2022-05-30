@@ -29,4 +29,10 @@ jupyter_like_style = """
     tbody tr:hover {
       background: rgba(66, 165, 245, 0.2);
     }
+    .left {
+      float: left;
+    }
+    .clear {
+      clear: left
+    }
 """

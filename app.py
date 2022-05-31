@@ -18,7 +18,7 @@ def predict_baken(race_id: str, background_tasks: BackgroundTasks):
     if doing_task and doing_task.get_id() == task_id:
         return str(html(
             body(
-                ul(''.join([f'{li(log)}' for log in task_create.get_logs()])),
+                ul(''.join([f'{li(log)}' for log in doing_task.get_logs()])),
             )
         ))
     elif doing_task and doing_task.get_id() != task_id:
@@ -45,7 +45,7 @@ def create_baken_html(race_id: str, background_tasks: BackgroundTasks, top: int=
     if doing_task and doing_task.get_id() == task_id:
         return str(html(
             body(
-                ul(''.join([f'{li(log)}' for log in task_create.get_logs()])),
+                ul(''.join([f'{li(log)}' for log in doing_task.get_logs()])),
             )
         ))
     elif doing_task and doing_task.get_id() != task_id:
@@ -79,7 +79,7 @@ def create_baken_html(race_id: str, background_tasks: BackgroundTasks, top: int=
     if doing_task and doing_task.get_id() == task_id:
         return str(html(
             body(
-                ul(''.join([f'{li(log)}' for log in task_create.get_logs()])),
+                ul(''.join([f'{li(log)}' for log in doing_task.get_logs()])),
             )
         ))
     elif doing_task and doing_task.get_id() != task_id:

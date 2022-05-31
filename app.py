@@ -54,7 +54,7 @@ def create_baken_html(race_id: str, background_tasks: BackgroundTasks, top: int=
     baken_pickle = pathlib.Path(f"{race_id}.predict")
     if not baken_pickle.is_file():
         return str(html(body(
-            div(f"Error: Did not find {baken_pickle}."),
+            div(f"Not found {baken_pickle}."),
             div(f"Go /predict/{race_id} first.")
         )))
     

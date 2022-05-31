@@ -221,20 +221,25 @@ def baken_prob(prob, names):
     baken["三連複"].df.style.set_properties(subset=['text'], **{'width': '300px'})
     return baken
 
-def calc_odds(baken, race_id, top=100):
+def calc_odds(baken, race_id, top=100, task_logs=[]):
     with chrome.driver() as driver:
-        baken["単勝"].odds = netkeiba.scrape_tanshou(driver, race_id)
-        baken["複勝"].odds = netkeiba.scrape_hukushou(driver, race_id)
+        task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?race_id={race_id}")
+        baken["単勝"].odds, baken["複勝"].odds = netkeiba.scrape_tanhuku(driver, race_id)
+        task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?type=b6&race_id={race_id}")
         baken["馬単"].odds = netkeiba.scrape_umatan(driver, race_id)
+        task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?type=b4&race_id={race_id}")
         baken["馬連"].odds = netkeiba.scrape_umaren(driver, race_id)
+        task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?type=b5&race_id={race_id}")
         baken["ワイド"].odds = netkeiba.scrape_wide(driver, race_id)
         sanrentan_odds_gen = netkeiba.scrape_sanrentan_generator(driver, race_id)
         sanrenpuku_odds_gen = netkeiba.scrape_sanrenpuku_generator(driver, race_id)
+        task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?type=b8&race_id={race_id}")
         while not tuples1_in_tuples2(baken["三連単"].nums[:top], list(baken["三連単"].odds.keys())):
             try:
                 baken["三連単"].odds |= next(sanrentan_odds_gen)
             except StopIteration:
                 pass
+        task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?type=b7&race_id={race_id}")
         while not tuples1_in_tuples2(baken["三連複"].nums[:top], list(baken["三連複"].odds.keys())):
             try:
                 baken["三連複"].odds |= next(sanrenpuku_odds_gen)
@@ -263,7 +268,7 @@ def good_baken(baken, odd_th=2.0):
         bets = min_bet(top_odds)
         if bets:
             bets_str = [f"{bet}円" for bet in bets]
-            returns = [math.ceil(odd*bet) for odd, bet in zip(top_odds, bets)]
+            returns = [int(round(odd*bet, -1)) for odd, bet in zip(top_odds, bets)]
             returns_str = [f"{ret}円" for ret in returns]
             invest = sum(bets)
             min_ret, max_ret = min(returns), max(returns)

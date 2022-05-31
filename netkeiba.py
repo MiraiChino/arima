@@ -141,17 +141,14 @@ def scrape_odds(driver, odds_url, convert_func=None):
         odds_list = scrape_oddstable()
         return odds_list
 
-def scrape_tanshou(driver, race_id):
-    tanshou_url = f"{BASE_URL}/odds/index.html?race_id={race_id}"
-    convert = lambda odds_list: {int(no): float(odds) for pop, waku, no, _, name, odds, huku, _ in odds_list}
-    tanshou_odds = scrape_odds(driver, tanshou_url, convert)
-    return tanshou_odds
-
-def scrape_hukushou(driver, race_id):
-    tanshou_url = f"{BASE_URL}/odds/index.html?race_id={race_id}"
-    convert = lambda odds_list: {int(no): round(sum(float(h) for h in huku.split('-'))/2, 1) for pop, waku, no, _, name, odds, huku, _ in odds_list}
-    hukushou_odds = scrape_odds(driver, tanshou_url, convert)
-    return hukushou_odds
+def scrape_tanhuku(driver, race_id):
+    tanhuku_url = f"{BASE_URL}/odds/index.html?race_id={race_id}"
+    to_float = lambda huku_str: round(sum(float(h) for h in huku_str.split('-'))/2, 1)
+    convert = lambda odds_list: [(int(no), float(tan), to_float(huku)) for pop, waku, no, _, name, tan, huku, _ in odds_list]
+    tanhuku_odds = scrape_odds(driver, tanhuku_url, convert)
+    tanshou_odds = {no: tan for no, tan, huku in tanhuku_odds}
+    hukushou_odds = {no: huku for no, tan, huku in tanhuku_odds}
+    return tanshou_odds, hukushou_odds
 
 @scraping
 def scrape_12odds(driver, url, odds_convert=None):

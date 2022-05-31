@@ -12,3 +12,7 @@ venv/
 
 # pickle
 *.pickle
+*.predict
+
+# html
+*.html

@@ -27,11 +27,11 @@
     - Webアプリ立ち上げ
         - `docker compose up`
     - ブラウザからアクセス
-        - 予測タスク開始
+        - 馬券予測
             - http://localhost:8080/predict/202205021211
-        - 予測タスクの状態表示
-            - http://localhost:8080/status/202205021211
-        - 予測の結果表示
+        - 馬券オッズ取得、結果ページ作成
+            - http://localhost:8080/create/202205021211
+        - 結果ページ
             - http://localhost:8080/result/202205021211
 
 ## 使用データ

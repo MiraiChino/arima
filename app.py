@@ -23,7 +23,8 @@ task_create = task.CreateBakenHTML()
 streamlog_html = str(html(
     head(
         script(f"""
-            const source = new EventSource("http://localhost:8080/log");
+            const logserver_url = location.protocol + "//" + location.host + "/log"
+            const source = new EventSource(logserver_url);
             source.onmessage = function(event) {{
                 document.getElementById("log").innerHTML += event.data + "<br>";
                 if (event.data == "{task.DONE}") {{

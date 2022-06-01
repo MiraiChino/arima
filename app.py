@@ -1,15 +1,23 @@
+import asyncio
 import pathlib
 
-import asyncio
 import uvicorn
 from domonic.html import *
 from fastapi import BackgroundTasks, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from sse_starlette.sse import EventSourceResponse
 
 import task
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 task_pred = task.PredictBaken()
 task_create = task.CreateBakenHTML()
 streamlog_html = str(html(

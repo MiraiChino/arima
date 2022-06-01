@@ -10,6 +10,8 @@ import netkeiba
 import predict
 
 
+DONE = "-- DONE"
+
 class DotDict(dict):
     def __init__(self, *args, **kwargs):
         super(DotDict, self).__init__(*args, **kwargs)
@@ -31,10 +33,7 @@ class Task():
         self.race_id = "no_id"
 
     def is_doing(self):
-        if self.logs and self.logs[-1] != "-- DONE":
-            return True
-        else:
-            return False
+        return self.logs and self.logs[-1] != DONE
     
     def get_raceid(self):
         return self.race_id
@@ -54,11 +53,11 @@ class PredictBaken(Task):
         try:
             if not race_id:
                 self.logs.append(f"Invalid race_id.")
-                self.logs.append(f"-- DONE")
+                self.logs.append(DONE)
                 return
             if baken_pickle.is_file():
                 self.logs.append(f"Already {baken_pickle} exists.")
-                self.logs.append(f"-- DONE")
+                self.logs.append(DONE)
                 return
             self.logs.append(f"scraping: https://race.netkeiba.com/race/shutuba.html?race_id={race_id}")
             horses = [horse for horse in netkeiba.scrape_shutuba(race_id)]
@@ -71,7 +70,7 @@ class PredictBaken(Task):
             with open(baken_pickle, 'wb') as f:
                 pickle.dump((baken, race_info), f)
             self.logs.append(f"{baken_pickle} saved")
-            self.logs.append(f"-- DONE")
+            self.logs.append(DONE)
         except Exception as e:
             self.logs.append(f"{e}")
 
@@ -91,7 +90,7 @@ class CreateBakenHTML(Task):
             page = str(html(
                 head(
                     meta(_charset="UTF-8"),
-                    style(css.jupyter_like_style)
+                    style(css.jupyter_like_style),
                 ),
                 body(
                     h3(f"{r.race_num}R {r.race_name}　{r.year}年{r.race_date} {netkeiba.PLACE[r.place_code]}"),
@@ -126,6 +125,6 @@ class CreateBakenHTML(Task):
                 f.write(page)
             self.logs.append(f"{baken_html} saved")
             self.logs.append(f"Go /result/{race_id}.")
-            self.logs.append(f"-- DONE")
+            self.logs.append(DONE)
         except Exception as e:
             self.logs.append(f"{e}")

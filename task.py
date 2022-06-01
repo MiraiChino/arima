@@ -45,7 +45,7 @@ def get_doing_task(tasks: List[Task]):
 
 class PredictBaken(Task):
 
-    def __call__(self, id, race_id):
+    def __call__(self, id, race_id, next_url):
         self.id = id
         self.race_id = race_id
         self.logs.append(f"-- START {id}")
@@ -70,13 +70,14 @@ class PredictBaken(Task):
             with open(baken_pickle, 'wb') as f:
                 pickle.dump((baken, race_info), f)
             self.logs.append(f"{baken_pickle} saved")
+            self.logs.append(f"<a href='{next_url}'>Go /create/{race_id}</a>")
             self.logs.append(DONE)
         except Exception as e:
             self.logs.append(f"{e}")
 
 class CreateBakenHTML(Task):
 
-    def __call__(self, id, race_id, top, odd_th):
+    def __call__(self, id, race_id, top, odd_th, next_url):
         self.id = id
         self.race_id = race_id
         self.logs.append(f"-- START {id}")
@@ -124,7 +125,7 @@ class CreateBakenHTML(Task):
             with open(baken_html, 'w') as f:
                 f.write(page)
             self.logs.append(f"{baken_html} saved")
-            self.logs.append(f"Go /result/{race_id}.")
+            self.logs.append(f"<a href='{next_url}'>Go /result/{race_id}</a>")
             self.logs.append(DONE)
         except Exception as e:
             self.logs.append(f"{e}")

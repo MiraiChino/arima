@@ -58,7 +58,7 @@ async def stream_log(request: Request):
     return EventSourceResponse(log_generator(request))
 
 @app.get("/predict/{race_id}", response_class=HTMLResponse)
-def predict_baken(race_id: str, background_tasks: BackgroundTasks):
+def predict_baken(race_id: str, request: Request, background_tasks: BackgroundTasks):
     task_id = f"/predict/{race_id}"
     doing_task = task.get_doing_task([task_pred, task_create])
     if doing_task and doing_task.get_id() == task_id:
@@ -70,15 +70,15 @@ def predict_baken(race_id: str, background_tasks: BackgroundTasks):
     if baken_pickle.is_file():
         return str(html(body(
             div(f"Already {baken_pickle} exists."),
-            div(f"Go /create/{race_id}.")
+            a(f"Go /create/{race_id}", _href=f"{request.base_url}create/{race_id}"),
         )))
 
     task_pred.init()
-    background_tasks.add_task(task_pred, task_id, race_id)
+    background_tasks.add_task(task_pred, task_id, race_id, next_url=f"{request.base_url}create/{race_id}")
     return streamlog_html
 
 @app.get("/create/{race_id}", response_class=HTMLResponse)
-def create_baken_html(race_id: str, background_tasks: BackgroundTasks, top: int=100, odd_th=2.0):
+def create_baken_html(race_id: str, request: Request, background_tasks: BackgroundTasks,top: int=100, odd_th: float=2.0):
     task_id = f"/create/{race_id}"
     doing_task = task.get_doing_task([task_pred, task_create])
     if doing_task and doing_task.get_id() == task_id:
@@ -90,22 +90,22 @@ def create_baken_html(race_id: str, background_tasks: BackgroundTasks, top: int=
     if not baken_pickle.is_file():
         return str(html(body(
             div(f"Not found {baken_pickle}."),
-            div(f"Go /predict/{race_id} first.")
+            a(f"Go /predict/{race_id}", _href=f"{request.base_url}predict/{race_id}"),
         )))
     
     baken_html = pathlib.Path(f"{race_id}.html")
     if baken_html.is_file():
         return str(html(body(
             div(f"Already {baken_html} exists."),
-            div(f"Go /result/{race_id}.")
+            a(f"Go /result/{race_id}", _href=f"{request.base_url}result/{race_id}"),
         )))
     
     task_create.init()
-    background_tasks.add_task(task_create, task_id, race_id, top, odd_th)
+    background_tasks.add_task(task_create, task_id, race_id, top, odd_th, next_url=f"{request.base_url}result/{race_id}")
     return streamlog_html
 
 @app.get("/update/{race_id}", response_class=HTMLResponse)
-def create_baken_html(race_id: str, background_tasks: BackgroundTasks, top: int=100, odd_th=2.0):
+def create_baken_html(race_id: str, request: Request, background_tasks: BackgroundTasks, top: int=100, odd_th: float=2.0):
     task_id = f"/update/{race_id}"
     doing_task = task.get_doing_task([task_pred, task_create])
     if doing_task and doing_task.get_id() == task_id:
@@ -117,20 +117,23 @@ def create_baken_html(race_id: str, background_tasks: BackgroundTasks, top: int=
     if not baken_pickle.is_file():
         return str(html(body(
             div(f"Not found {baken_pickle}."),
-            div(f"Go /predict/{race_id} first.")
+            a(f"Go /predict/{race_id}", _href=f"{request.base_url}predict/{race_id}"),
         )))
     
     task_create.init()
-    background_tasks.add_task(task_create, task_id, race_id, top, odd_th)
+    background_tasks.add_task(task_create, task_id, race_id, top, odd_th, next_url=f"{request.base_url}result/{race_id}")
     return streamlog_html
 
 @app.get("/result/{race_id}")
-def race_html(race_id: str):
+def race_html(race_id: str, request: Request):
     baken_html = pathlib.Path(f"{race_id}.html")
     if baken_html.is_file():
         return FileResponse(baken_html)
     else:
-        return f"Not found {baken_html}. Go /create/{race_id} first."
+        return HTMLResponse(str(html(body(
+            div(f"Not found {baken_html}."),
+            a(f"Go /create/{race_id}", _href=f"{request.base_url}create/{race_id}"),
+        ))))
 
 if __name__ == "__main__":
     uvicorn.run(app, debug=True, host="0.0.0.0", port=8080)

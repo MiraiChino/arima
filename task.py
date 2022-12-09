@@ -93,8 +93,9 @@ class CreateBakenHTML(Task):
             baken = predict.calc_odds(baken, race_id, top, self.logs)
             baken = predict.good_baken(baken, odd_th)
         except Exception as e:
-            self.logs.append(f"{e}")
             self.logs.append(f"Not found odds data")
+            with open(f"{race_id}.predict", 'rb') as f:
+                baken, r = pickle.load(f)
             pagebody = body(
                 h3(f"{r.race_num}R {r.race_name}　{r.year}年{r.race_date} {netkeiba.PLACE[r.place_code]}"),
                 div(f"{r.start_time}発走 / {r.field}{r.distance}m ({r.turn}) / 天候:{r.weather} / 馬場:{r.field_condition}"),

@@ -85,41 +85,72 @@ class CreateBakenHTML(Task):
         try:
             with open(f"{race_id}.predict", 'rb') as f:
                 baken, r = pickle.load(f)
+        except Exception as e:
+            self.logs.append(f"{e}")
+
+        try:
             self.logs.append(f"loaded {race_id}.predict")
             baken = predict.calc_odds(baken, race_id, top, self.logs)
             baken = predict.good_baken(baken, odd_th)
+        except Exception as e:
+            self.logs.append(f"{e}")
+            self.logs.append(f"Not found odds data")
+            pagebody = body(
+                h3(f"{r.race_num}R {r.race_name}　{r.year}年{r.race_date} {netkeiba.PLACE[r.place_code]}"),
+                div(f"{r.start_time}発走 / {r.field}{r.distance}m ({r.turn}) / 天候:{r.weather} / 馬場:{r.field_condition}"),
+                div(f"{r.race_condition} / 本賞金:{r.prize1},{r.prize2},{r.prize3},{r.prize4},{r.prize5}万円"),
+                hr(),
+                h3("単勝", _class="clear"),
+                baken["単勝"].df.to_html(classes='left'),
+                h3("複勝", _class="clear"),
+                baken["複勝"].df.to_html(classes='left'),
+                h3("ワイド", _class="clear"),
+                baken["ワイド"].df.to_html(classes='left'),
+                h3("馬連", _class="clear"),
+                baken["馬連"].df.to_html(classes='left'),
+                h3("馬単", _class="clear"),
+                baken["馬単"].df.to_html(classes='left'),
+                h3("三連複", _class="clear"),
+                baken["三連複"].df.to_html(classes='left'),
+                h3("三連単", _class="clear"),
+                baken["三連単"].df.to_html(classes='left'),
+            )
+        else:
+            pagebody = body(
+                h3(f"{r.race_num}R {r.race_name}　{r.year}年{r.race_date} {netkeiba.PLACE[r.place_code]}"),
+                div(f"{r.start_time}発走 / {r.field}{r.distance}m ({r.turn}) / 天候:{r.weather} / 馬場:{r.field_condition}"),
+                div(f"{r.race_condition} / 本賞金:{r.prize1},{r.prize2},{r.prize3},{r.prize4},{r.prize5}万円"),
+                hr(),
+                h3("単勝", _class="clear"),
+                baken["単勝"].df.to_html(classes='left'),
+                baken["単勝"].df2.to_html(index=False),
+                h3("複勝", _class="clear"),
+                baken["複勝"].df.to_html(classes='left'),
+                baken["複勝"].df2.to_html(index=False),
+                h3("ワイド", _class="clear"),
+                baken["ワイド"].df.to_html(classes='left'),
+                baken["ワイド"].df2.to_html(index=False),
+                h3("馬連", _class="clear"),
+                baken["馬連"].df.to_html(classes='left'),
+                baken["馬連"].df2.to_html(index=False),
+                h3("馬単", _class="clear"),
+                baken["馬単"].df.to_html(classes='left'),
+                baken["馬単"].df2.to_html(index=False),
+                h3("三連複", _class="clear"),
+                baken["三連複"].df.to_html(classes='left'),
+                baken["三連複"].df2.to_html(index=False),
+                h3("三連単", _class="clear"),
+                baken["三連単"].df.to_html(classes='left'),
+                baken["三連単"].df2.to_html(index=False),
+            )
+
+        try:
             page = str(html(
                 head(
                     meta(_charset="UTF-8"),
                     style(css.jupyter_like_style),
                 ),
-                body(
-                    h3(f"{r.race_num}R {r.race_name}　{r.year}年{r.race_date} {netkeiba.PLACE[r.place_code]}"),
-                    div(f"{r.start_time}発走 / {r.field}{r.distance}m ({r.turn}) / 天候:{r.weather} / 馬場:{r.field_condition}"),
-                    div(f"{r.race_condition} / 本賞金:{r.prize1},{r.prize2},{r.prize3},{r.prize4},{r.prize5}万円"),
-                    hr(),
-                    h3("単勝", _class="clear"),
-                    baken["単勝"].df.to_html(classes='left'),
-                    baken["単勝"].df2.to_html(index=False),
-                    h3("複勝", _class="clear"),
-                    baken["複勝"].df.to_html(classes='left'),
-                    baken["複勝"].df2.to_html(index=False),
-                    h3("ワイド", _class="clear"),
-                    baken["ワイド"].df.to_html(classes='left'),
-                    baken["ワイド"].df2.to_html(index=False),
-                    h3("馬連", _class="clear"),
-                    baken["馬連"].df.to_html(classes='left'),
-                    baken["馬連"].df2.to_html(index=False),
-                    h3("馬単", _class="clear"),
-                    baken["馬単"].df.to_html(classes='left'),
-                    baken["馬単"].df2.to_html(index=False),
-                    h3("三連複", _class="clear"),
-                    baken["三連複"].df.to_html(classes='left'),
-                    baken["三連複"].df2.to_html(index=False),
-                    h3("三連単", _class="clear"),
-                    baken["三連単"].df.to_html(classes='left'),
-                    baken["三連単"].df2.to_html(index=False),
-                ),
+                pagebody,
                 _lang="ja"
             ))
             with open(baken_html, 'w') as f:

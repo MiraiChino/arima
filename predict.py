@@ -131,6 +131,7 @@ def result_prob(df, task_logs=[]):
             total_loaded += h
             task_logs.append(f"loaded {total_loaded} rows from {config.feat_db}")
             chunks.append(df_chunk_reduced)
+        task_logs.append(f"loaded race history {total_loaded} rows")
         hist = pd.concat(chunks, ignore_index=True)
         hist["race_date"] = pd.to_datetime(hist["race_date"])
         hist = hist.sort_values("race_date")

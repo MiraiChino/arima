@@ -1,3 +1,4 @@
+import datetime
 import pathlib
 import pickle
 import traceback
@@ -17,9 +18,14 @@ class DotDict(dict):
         super(DotDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
 
+class Logs(list):
+    def append(self, val):
+        now = datetime.datetime.now().strftime('%H:%M:%S')
+        super(Logs, self).append(f"{now}  {val}")
+
 class Task():
     id = ''
-    logs = []
+    logs = Logs()
     race_id = 'no_id'
 
     def get_id(self):
@@ -29,7 +35,7 @@ class Task():
         return self.logs
 
     def init(self):
-        self.logs = []
+        self.logs = Logs()
         self.race_id = "no_id"
 
     def is_doing(self):

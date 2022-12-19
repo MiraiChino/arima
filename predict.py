@@ -125,13 +125,13 @@ def result_prob(df, task_logs=[]):
         reader = pd.read_sql_query(f"SELECT * FROM horse WHERE race_date < '{race_date}' AND ({condition})", conn, chunksize=c_size)
         chunks = []
         total_loaded = 0
+        task_logs.append(f"loading race history from {config.feat_db}")
         for df_chunk in reader:
             df_chunk_reduced = utils.reduce_mem_usage(df_chunk, verbose=True)
             h, w = df_chunk_reduced.shape
             total_loaded += h
             task_logs.append(f"loaded {total_loaded} rows from {config.feat_db}")
             chunks.append(df_chunk_reduced)
-        task_logs.append(f"loaded race history {total_loaded} rows")
         hist = pd.concat(chunks, ignore_index=True)
         hist["race_date"] = pd.to_datetime(hist["race_date"])
         hist = hist.sort_values("race_date")
@@ -140,16 +140,17 @@ def result_prob(df, task_logs=[]):
             df_agg = feature_extractor.search_history(row, hist_pattern, feat_pattern, hist)
             df_feat = pd.concat([df_feat, df_agg])
     df_feat = df_feat.drop(columns=config.NONEED_COLUMNS)
-
     probs = []
     model_files = [f"{i}_{file}" for file in (config.rank_file, config.reg_file) for i in range(len(config.splits))]
+    task_logs.append(f"predict")
     for model_file in model_files:
         with open(model_file, "rb") as f:
-            task_logs.append(f"predicting: with {model_file}")
             model = pickle.load(f)
             pred = model.predict(df_feat.values, num_iteration=model.best_iteration)
             pred_prob = probability(pred)
             probs.append(pred_prob)
+            task_logs.append(f"{model_file}:")
+            task_logs.append(f"{[f'{p*100:.2f}%' for p in pred_prob]}")
     prob = np.array(probs).mean(axis=0)
     return {i: p for i, p in zip(df_feat["horse_no"].to_list(), prob)}
 
@@ -222,6 +223,32 @@ def baken_prob(prob, names):
     baken["三連複"].df.style.set_properties(subset=['text'], **{'width': '300px'})
     return baken
 
+def pretty_prob(baken, top=100):
+    for b_type, b in baken.items():
+        b.df = b.df.head(top)
+        probs = list(b.prob.values())[:top]
+        b.nums = b.nums[:top]
+        cum_probs = cumulative_prob(probs)
+        b.df["確率"] = pd.Series([f"{p*100:.2f}%" for p in b.df["確率"].values])
+        b.df["累積確率"] = pd.Series([f"{p*100:.2f}%" for p in cum_probs])
+    return baken
+
+def pretty_baken(baken, top=100):
+    for b_type, b in baken.items():
+        b.df = b.df.head(top)
+        probs = list(b.prob.values())[:top]
+        b.nums = b.nums[:top]
+        cum_probs = cumulative_prob(probs)
+        b.df["確率"] = pd.Series([f"{p*100:.2f}%" for p in b.df["確率"].values])
+        b.df["オッズ"] = pd.Series([b.odds[nums] for nums in b.nums])
+        b.df["期待値"] = b.df["オッズ"] * pd.Series(probs)
+        b.df["期待値"] = pd.Series([round(p, 2) for p in b.df["期待値"].values])
+        b.df["累積確率"] = pd.Series([f"{p*100:.2f}%" for p in cum_probs])
+        b.df["合成オッズ"] = pd.Series([round(p, 2) for p in cumulative_odds(b.df["オッズ"].values)])
+        b.df["合成期待値"] = b.df["合成オッズ"] * pd.Series(cum_probs)
+        b.df["合成期待値"] = pd.Series([round(p, 2) for p in b.df["合成期待値"].values])
+    return baken
+
 def calc_odds(baken, race_id, top=100, task_logs=[]):
     with chrome.driver() as driver:
         task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?race_id={race_id}")
@@ -246,20 +273,6 @@ def calc_odds(baken, race_id, top=100, task_logs=[]):
                 baken["三連複"].odds |= next(sanrenpuku_odds_gen)
             except StopIteration:
                 pass
-
-    for b_type, b in baken.items():
-        b.df = b.df.head(top)
-        probs = list(b.prob.values())[:top]
-        b.nums = b.nums[:top]
-        cum_probs = cumulative_prob(probs)
-        b.df["確率"] = pd.Series([f"{p*100:.2f}%" for p in b.df["確率"].values])
-        b.df["オッズ"] = pd.Series([b.odds[nums] for nums in b.nums])
-        b.df["期待値"] = b.df["オッズ"] * pd.Series(probs)
-        b.df["期待値"] = pd.Series([round(p, 2) for p in b.df["期待値"].values])
-        b.df["累積確率"] = pd.Series([f"{p*100:.2f}%" for p in cum_probs])
-        b.df["合成オッズ"] = pd.Series([round(p, 2) for p in cumulative_odds(b.df["オッズ"].values)])
-        b.df["合成期待値"] = b.df["合成オッズ"] * pd.Series(cum_probs)
-        b.df["合成期待値"] = pd.Series([round(p, 2) for p in b.df["合成期待値"].values])
     return baken
 
 def good_baken(baken, odd_th=2.0):

@@ -1,5 +1,6 @@
 import pathlib
 import pickle
+import traceback
 from typing import List
 
 import pandas as pd
@@ -8,7 +9,6 @@ from domonic.html import *
 import css
 import netkeiba
 import predict
-
 
 DONE = "-- DONE"
 
@@ -63,9 +63,16 @@ class PredictBaken(Task):
             horses = [horse for horse in netkeiba.scrape_shutuba(race_id)]
             df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
             race_info = DotDict(df_original.loc[0, :].to_dict())
+            if df_original['horse_no'].isnull().sum() == len(df_original['horse_no']):
+                self.logs.append(f"assign temporary horse number because failed to scrape it")
+                df_original['horse_no'] = pd.Series([i for i in range(1, 1+len(df_original['horse_no']))])
+            self.logs.append(f"scraped horse data")
+            for no, name in zip(df_original["horse_no"].to_list(), df_original["name"].to_list()):
+                self.logs.append(f"{no}: {name}")
             result_prob = predict.result_prob(df_original, task_logs=self.logs)
             names = {no: name for no, name in zip(df_original["horse_no"].to_list(), df_original["name"].to_list())}
-            self.logs.append(f"predicting: 単勝 複勝 ワイド 馬連 馬単 三連複 三連単")
+            for no, name, p in zip(df_original["horse_no"].to_list(), df_original["name"].to_list(), result_prob.values()):
+                self.logs.append(f"{p*100:.2f}% {no}: {name}")
             baken = predict.baken_prob(result_prob, names)
             with open(baken_pickle, 'wb') as f:
                 pickle.dump((baken, race_info), f)
@@ -73,7 +80,7 @@ class PredictBaken(Task):
             self.logs.append(f"<a href='{next_url}'>Go /create/{race_id}</a>")
             self.logs.append(DONE)
         except Exception as e:
-            self.logs.append(f"{e}")
+            self.logs.append(f"{traceback.format_exc()}")
 
 class CreateBakenHTML(Task):
 
@@ -85,17 +92,19 @@ class CreateBakenHTML(Task):
         try:
             with open(f"{race_id}.predict", 'rb') as f:
                 baken, r = pickle.load(f)
+            self.logs.append(f"loaded {race_id}.predict")
         except Exception as e:
-            self.logs.append(f"{e}")
+            self.logs.append(f"{traceback.format_exc()}")
 
         try:
-            self.logs.append(f"loaded {race_id}.predict")
             baken = predict.calc_odds(baken, race_id, top, self.logs)
+            baken = predict.pretty_baken(baken, top)
             baken = predict.good_baken(baken, odd_th)
         except Exception as e:
-            self.logs.append(f"Not found odds data")
+            self.logs.append(f"{traceback.format_exc()}")
             with open(f"{race_id}.predict", 'rb') as f:
                 baken, r = pickle.load(f)
+            baken = predict.pretty_prob(baken, top)
             pagebody = body(
                 h3(f"{r.race_num}R {r.race_name}　{r.year}年{r.race_date} {netkeiba.PLACE[r.place_code]}"),
                 div(f"{r.start_time}発走 / {r.field}{r.distance}m ({r.turn}) / 天候:{r.weather} / 馬場:{r.field_condition}"),
@@ -160,4 +169,4 @@ class CreateBakenHTML(Task):
             self.logs.append(f"<a href='{next_url}'>Go /result/{race_id}</a>")
             self.logs.append(DONE)
         except Exception as e:
-            self.logs.append(f"{e}")
+            self.logs.append(f"{traceback.format_exc()}")

@@ -64,7 +64,7 @@ def predict_baken(race_id: str, request: Request, background_tasks: BackgroundTa
     if doing_task and doing_task.get_id() == task_id:
         return streamlog_html
     elif doing_task and doing_task.get_id() != task_id:
-        return str(html(body(div(f"Doing {doing_task.get_id()}."))))
+        return str(html(body(a(f"Doing {doing_task.get_id()}.", _href=f"{request.base_url}{doing_task.get_id()[1:]}"))))
 
     baken_pickle = pathlib.Path(f"{race_id}.predict")
     if baken_pickle.is_file():
@@ -84,7 +84,7 @@ def create_baken_html(race_id: str, request: Request, background_tasks: Backgrou
     if doing_task and doing_task.get_id() == task_id:
         return streamlog_html
     elif doing_task and doing_task.get_id() != task_id:
-        return str(html(body(div(f"Doing {doing_task.get_id()}."))))
+        return str(html(body(a(f"Doing {doing_task.get_id()}.", _href=f"{request.base_url}{doing_task.get_id()[1:]}"))))
     
     baken_pickle = pathlib.Path(f"{race_id}.predict")
     if not baken_pickle.is_file():
@@ -111,7 +111,7 @@ def create_baken_html(race_id: str, request: Request, background_tasks: Backgrou
     if doing_task and doing_task.get_id() == task_id:
         return streamlog_html
     elif doing_task and doing_task.get_id() != task_id:
-        return str(html(body(div(f"Doing {doing_task.get_id()}."))))
+        return str(html(body(a(f"Doing {doing_task.get_id()}.", _href=f"{request.base_url}{doing_task.get_id()[1:]}"))))
     
     baken_pickle = pathlib.Path(f"{race_id}.predict")
     if not baken_pickle.is_file():

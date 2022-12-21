@@ -146,7 +146,7 @@ def search_history(target_row, hist_pattern, feat_pattern, df):
         hist_df = pd.concat([hist_df, row_df_column], axis="columns")
     return hist_df
 
-def prepare(races_files, horses_files, output_feat_db, output_encoder_file, output_avetime_file):
+def prepare(races_files, horses_files, output_feat_file, output_encoder_file, output_avetime_file):
     races_chunks, horses_chunks = [], []
     for races_file, horses_file in zip(races_files, horses_files):
         df_races_chunk = pd.read_feather(races_file)
@@ -216,14 +216,14 @@ def prepare(races_files, horses_files, output_feat_db, output_encoder_file, outp
         cols_to_use = df_feats[column].columns.difference(df_feat.columns).tolist() + ["id"]
         df_feat = pd.merge(df_feat, df_feats[column][cols_to_use], on="id")
     df_feat = utils.reduce_mem_usage(df_feat)
-    df_feat.to_feather(output_feat_db)
+    df_feat.to_feather(output_feat_file)
 
 
 if __name__ == "__main__":
     prepare(
         races_files=config.netkeiba_races,
         horses_files=config.netkeiba_horses,
-        output_feat_db=config.feat_db,
+        output_feat_file=config.feat_file,
         output_encoder_file=config.encoder_file,
         output_avetime_file=config.avetime_file
     )

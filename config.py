@@ -9,7 +9,7 @@ netkeiba_races = [f"netkeiba/netkeiba{y}-{m}.races.feather" for y, m in utils.da
 # feature extraction
 encoder_file = f"encoder{from_date}_{to_date}.feather"
 avetime_file = f"avetime{from_date}_{to_date}.feather"
-feat_db = f"feature{from_date}_{to_date}.feather"
+feat_file = f"feature{from_date}_{to_date}.feather"
 
 NONEED_COLUMNS = [
     "id", "index", "result", "time", "margin", "pop", "odds", "last3f", \

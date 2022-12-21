@@ -1,8 +1,5 @@
-import sqlite3
-
 import dill as pickle
 import lightgbm as lgb
-import numpy as np
 import pandas as pd
 from lightgbm import Dataset
 
@@ -22,14 +19,8 @@ def prepare_dataset(df, target):
     return dataset
 
 if __name__ == "__main__":
-    with sqlite3.connect(config.feat_db) as conn:
-        reader = pd.read_sql_query("SELECT * FROM horse", conn, chunksize=10000)
-        chunks = []
-        for i, df in enumerate(reader):
-            print(i+1, df.shape)
-            df_feat_chunk = utils.reduce_mem_usage(df)
-            chunks.append(df_feat_chunk)
-        df_feat = pd.concat(chunks, ignore_index=True)
+    df_feat = pd.read_feather(config.feat_db)
+    df_feat = utils.reduce_mem_usage(df_feat)
     print(df_feat.head()["race_date"])
     print(df_feat.tail()["race_date"])
 

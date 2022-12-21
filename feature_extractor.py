@@ -215,7 +215,8 @@ def prepare(races_files, horses_files, output_feat_db, output_encoder_file, outp
     for column in cols[1:]:
         cols_to_use = df_feats[column].columns.difference(df_feat.columns).tolist() + ["id"]
         df_feat = pd.merge(df_feat, df_feats[column][cols_to_use], on="id")
-        df_feat.to_feather(output_feat_db)
+    df_feat = utils.reduce_mem_usage(df_feat)
+    df_feat.to_feather(output_feat_db)
 
 
 if __name__ == "__main__":

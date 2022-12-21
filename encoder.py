@@ -7,7 +7,10 @@ from sklearn.preprocessing import OrdinalEncoder
 
 class HorseEncoder():
 
-    STR_COLUMNS = ["name", "sex", "jockey", "barn", "turn", "weather", "field", "field_condition", "race_condition", "race_name"]
+    STR_COLUMNS = [
+        "name", "horse_id", "jockey", "jockey_id", "trainer", "trainer_id",
+        "sex", "turn", "weather", "field", "field_condition", "race_condition", "race_name"
+    ]
 
     def __init__(self):
         self.encoder = OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)
@@ -22,6 +25,8 @@ class HorseEncoder():
         result["cos_starttime"] = encode_starttime(df["start_time"])
         result["margin"] = encoded_margin(df)
         result["time"] = encoded_time(df["time"])
+        result["tanshou"] = calc_tanshou(df)
+        result["hukushou"] = calc_hukushou(df)
         result["prize"] = calc_prize(df)
         result["score"] = calc_score(df)
         result[HorseEncoder.STR_COLUMNS] = self.encoder.transform(df[HorseEncoder.STR_COLUMNS])
@@ -32,7 +37,8 @@ class HorseEncoder():
 
     def format(self, df):
         result = df.copy()
-        result["jockey"] = format_jockey(df["jockey"])
+        result["race_id"] = df["race_id"].astype(int)
+        result["race_id"] = df["race_id"].astype(int)
         result["race_date"] = format_date(df["race_date"], df["year"])
         result["corner3"] = format_corner3(df["corner"])
         result["corner4"] = format_corner4(df["corner"])
@@ -53,8 +59,8 @@ def to_score(x):
     no = x["result"]
     if not no:
         return None
-    if 1 <= no <= 5:
-        return [20, 8, 5, 3, 2][no-1]
+    elif 1 <= no <= 5:
+        return [20, 8, 5, 3, 2][int(no)-1]
     else:
         return 0
 
@@ -62,8 +68,34 @@ def get_prize(x):
     no = x["result"]
     if not no:
         return None
-    if 1 <= no <= 5:
-        return x[f"prize{no}"]
+    elif 1 <= no <= 5:
+        return x[f"prize{int(no)}"]
+    else:
+        return 0
+
+def get_tanshou(x):
+    no = x["result"]
+    if not no:
+        return None
+    elif no == 1:
+        if x["horse_no"] == x["tanno1"]:
+            return x[f"tan1"]
+        elif x["horse_no"] == x["tanno2"]:
+            return 100/x[f"tan2"]
+    else:
+        return 0
+
+def get_hukushou(x):
+    no = x["result"]
+    if not no:
+        return None
+    elif 1 <= no <= 3:
+        if x["horse_no"] == x["hukuno1"]:
+            return 100/x[f"huku1"]
+        elif x["horse_no"] == x["hukuno2"]:
+            return 100/x[f"huku2"]
+        elif x["horse_no"] == x["hukuno3"]:
+            return 100/x[f"huku3"]
     else:
         return 0
 
@@ -118,6 +150,15 @@ def encode_starttime(s_starttime):
 def calc_prize(df):
     return df.apply(get_prize, axis="columns")
 
+def calc_score(df):
+    return df.apply(to_score, axis="columns")
+
+def calc_hukushou(df):
+    return df.apply(get_hukushou, axis="columns")
+
+def calc_tanshou(df):
+    return df.apply(get_tanshou, axis="columns")
+
 def yield_df_race(df):
     return df.groupby(["year", "place_code", "hold_num", "day_num", "race_num"])
 
@@ -132,20 +173,55 @@ def encoded_margin(df):
 def encoded_time(s_time):
     return s_time.apply(to_seconds)
 
-def calc_score(df):
-    return df.apply(to_score, axis="columns")
-
 if __name__ == "__main__":
     import netkeiba
     horse_encoder = HorseEncoder()
-    horses = [horse for horse in netkeiba.scrape_shutuba("202206010111")]
-    df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
+    race_data, horses = netkeiba.scrape_shutuba("200806010101")
+    df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
+    df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_PRE_COLUMNS)
+    df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
     df_format = horse_encoder.format(df_original)
     df_encoded = horse_encoder.fit_transform(df_format)
-    print(df_encoded.T)
+    print(df_encoded)
 
-    horses = [horse for horse in netkeiba.scrape_results("202106050811")]
-    df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
+    race_data, horses = netkeiba.scrape_results("200806010108") # ３連単なし
+    df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
+    df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_AFTER_COLUMNS)
+    df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
     df_format = horse_encoder.format(df_original)
     df_encoded = horse_encoder.transform(df_format)
-    print(df_encoded.T)
+    print(df_encoded)
+
+    race_data, horses = netkeiba.scrape_results("200808010709") # 単勝２頭（同着）
+    df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
+    df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_AFTER_COLUMNS)
+    df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
+    df_format = horse_encoder.format(df_original)
+    df_encoded = horse_encoder.transform(df_format)
+    print(df_encoded)
+
+    race_data, horses = netkeiba.scrape_results("201302010505") # 枠連なし、複勝なぜか２頭
+    df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
+    df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_AFTER_COLUMNS)
+    df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
+    df_format = horse_encoder.format(df_original)
+    df_encoded = horse_encoder.transform(df_format)
+    print(df_encoded)
+
+    #     result  gate  horse_no  name  horse_id  sex  age  ...  corner4  cos_racedate  cos_starttime  tanshou  hukushou  prize  score
+    # 0      1.0     6        11   0.0      12.0  2.0    3  ...     12.0      0.085965       -0.55557     2340       570   1000     20
+    # 1      2.0     2         4   7.0       8.0  2.0    3  ...      1.0      0.085965       -0.55557        0       200    400      8
+    # 2      3.0     1         2   9.0      14.0  2.0    3  ...     10.0      0.085965       -0.55557        0      1430    250      5
+    # 3      4.0     3         5   4.0      13.0  2.0    3  ...      3.0      0.085965       -0.55557        0         0    150      3
+    # 4      5.0     2         3  11.0       7.0  2.0    3  ...      3.0      0.085965       -0.55557        0         0    100      2
+    # 5      6.0     7        14   3.0       5.0  2.0    3  ...     10.0      0.085965       -0.55557        0         0      0      0
+    # 6      7.0     8        15  15.0      10.0  0.0    3  ...     12.0      0.085965       -0.55557        0         0      0      0
+    # 7      8.0     6        12   8.0       4.0  2.0    3  ...      6.0      0.085965       -0.55557        0         0      0      0
+    # 8      9.0     8        16   1.0       6.0  2.0    3  ...      3.0      0.085965       -0.55557        0         0      0      0
+    # 9     10.0     4         8  14.0      11.0  2.0    3  ...      6.0      0.085965       -0.55557        0         0      0      0
+    # 10    11.0     5         9  10.0      15.0  2.0    3  ...      2.0      0.085965       -0.55557        0         0      0      0
+    # 11    12.0     3         6  13.0       1.0  2.0    3  ...      6.0      0.085965       -0.55557        0         0      0      0
+    # 12    13.0     4         7  12.0       9.0  2.0    3  ...      6.0      0.085965       -0.55557        0         0      0      0
+    # 13    14.0     7        13   5.0       2.0  2.0    3  ...     14.0      0.085965       -0.55557        0         0      0      0
+    # 14    15.0     5        10   2.0       3.0  1.0    3  ...     15.0      0.085965       -0.55557        0         0      0      0
+    # 15     NaN     1         1   6.0       0.0  1.0    3  ...      NaN      0.085965       -0.55557        0         0      0      0

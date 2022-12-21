@@ -13,9 +13,7 @@ venv
 README.md
 train.py
 arima.ipynb
-netkeiba20220508.sqlite
 Dockerfile
 docker-compose.yml
 docker-compose.deploy.yml
-*.html
-*.predict
+netkeiba/.gitkeep

@@ -1,21 +1,29 @@
+import utils
+
 # scraping
 from_date = "2008-01"
-to_date = "2022-05"
-netkeiba_db = "netkeiba20220508.sqlite"
+to_date = "2022-12"
+netkeiba_horses = [f"netkeiba/netkeiba{y}-{m}.horses.feather" for y, m in utils.daterange(from_date, to_date)]
+netkeiba_races = [f"netkeiba/netkeiba{y}-{m}.races.feather" for y, m in utils.daterange(from_date, to_date)]
 
 # feature extraction
-encoder_file = "encoder20220508v2.pickle"
-feat_db = "feature20220508v2.sqlite"
+encoder_file = f"encoder{from_date}_{to_date}.feather"
+avetime_file = f"avetime{from_date}_{to_date}.feather"
+feat_db = f"feature{from_date}_{to_date}.feather"
 
 NONEED_COLUMNS = [
     "id", "index", "result", "time", "margin", "pop", "odds", "last3f", \
     "weight", "weight_change", "corner", "corner3", "corner4", \
     "year", "hold_num", "race_num", "day_num", "race_date", "race_name", \
-    "start_time", "prize1", "prize2", "prize3", "prize4", "prize5", "prize", "score"
+    "start_time", "prize1", "prize2", "prize3", "prize4", "prize5", "prize", "score", \
+    'tan', 'tan_pay', 'huku1', 'huku1_pay', 'huku2', 'huku2_pay', 'huku3', 'huku3_pay',  \
+    'wide11', 'wide12', 'wide1_pay', 'wide21', 'wide22', 'wide2_pay', 'wide31', 'wide32', \
+    'wide3_pay', 'ren1', 'ren2', 'ren_pay', 'uma1', 'uma2', 'uma_pay', \
+    'puku1', 'puku2', 'puku3', 'puku_pay', 'san1', 'san2', 'san3', 'san_pay'
 ]
-RACE_COLUMNS = ["year", "place_code", "hold_num", "day_num", "race_num"]
+RACEDATE_COLUMNS = ["year", "place_code", "hold_num", "day_num", "race_num"]
 
-hist_pattern = [1, 2, 3, 10, 999999]
+hist_pattern = [1, 2, 3, 5, 999999]
 
 def feature_pattern(ave_time):
     from feature_extractor import (ave, distance_prize, interval, same_ave,
@@ -35,6 +43,9 @@ def feature_pattern(ave_time):
             "horse_last3f": ave("last3f"),
             "horse_weight": ave("weight"),
             "horse_wc": ave("weight_change"),
+            "horse_tan": ave("tanshou"),
+            "horse_huku": ave("hukushou"),
+            "horse_score": ave("score"),
             "horse_prize": ave("prize"),
             "horse_pprize": same_ave("place_code", target="prize"),
             "horse_dprize": same_ave("distance", target="prize"),
@@ -77,6 +88,9 @@ def feature_pattern(ave_time):
             "jockey_corner3": ave("corner3"),
             "jockey_corner4": ave("corner4"),
             "jockey_last3f": ave("last3f"),
+            "jockey_tan": ave("tanshou"),
+            "jockey_huku": ave("hukushou"),
+            "jockey_score": ave("score"),
             "jockey_prize": ave("prize"),
             "jockey_pprize": same_ave("place_code", target="prize"),
             "jockey_dprize": same_ave("distance", target="prize"),
@@ -95,49 +109,56 @@ def feature_pattern(ave_time):
             "jockey_pfdcprize": same_ave("place_code", "field", "distance", "field_condition", target="prize"),
             "jockey_pfdtprize": same_ave("place_code", "field", "distance", "turn", target="prize"),
         },
-        "barn": {
-            "barn_interval": interval,
-            "barn_odds": ave("odds"),
-            "barn_pop": ave("pop"),
-            "barn_result": ave("result"),
-            "barn_time": time(ave_time),
-            "barn_margin": ave("margin"),
-            "barn_corner3": ave("corner3"),
-            "barn_corner4": ave("corner4"),
-            "barn_last3f": ave("last3f"),
-            "barn_prize": ave("prize"),
-            "barn_pprize": same_ave("place_code", target="prize"),
-            "barn_dprize": same_ave("distance", target="prize"),
-            "barn_fprize": same_ave("field", target="prize"),
-            "barn_cprize": same_ave("field_condition", target="prize"),
-            "barn_fdprize": same_ave("field", "distance", target="prize"),
-            "barn_fcprize": same_ave("field", "field_condition", target="prize"),
-            "barn_pfprize": same_ave("place_code", "field", target="prize"),
-            "barn_pdprize": same_ave("place_code", "distance", target="prize"),
-            "barn_pfdprize": same_ave("place_code", "field", "distance", target="prize"),
-            "barn_pfcprize": same_ave("place_code", "field", "field_condition", target="prize"),
-            "barn_dfcprize": same_ave("distance", "field", "field_condition", target="prize"),
-            "barn_pfdcprize": same_ave("place_code", "field", "distance", "field_condition", target="prize"),
+        "trainer": {
+            "trainer_interval": interval,
+            "trainer_odds": ave("odds"),
+            "trainer_pop": ave("pop"),
+            "trainer_result": ave("result"),
+            "trainer_time": time(ave_time),
+            "trainer_margin": ave("margin"),
+            "trainer_corner3": ave("corner3"),
+            "trainer_corner4": ave("corner4"),
+            "trainer_last3f": ave("last3f"),
+            "trainer_tan": ave("tanshou"),
+            "trainer_huku": ave("hukushou"),
+            "trainer_score": ave("score"),
+            "trainer_prize": ave("prize"),
+            "trainer_pprize": same_ave("place_code", target="prize"),
+            "trainer_dprize": same_ave("distance", target="prize"),
+            "trainer_fprize": same_ave("field", target="prize"),
+            "trainer_cprize": same_ave("field_condition", target="prize"),
+            "trainer_fdprize": same_ave("field", "distance", target="prize"),
+            "trainer_fcprize": same_ave("field", "field_condition", target="prize"),
+            "trainer_pfprize": same_ave("place_code", "field", target="prize"),
+            "trainer_pdprize": same_ave("place_code", "distance", target="prize"),
+            "trainer_pfdprize": same_ave("place_code", "field", "distance", target="prize"),
+            "trainer_pfcprize": same_ave("place_code", "field", "field_condition", target="prize"),
+            "trainer_dfcprize": same_ave("distance", "field", "field_condition", target="prize"),
+            "trainer_pfdcprize": same_ave("place_code", "field", "distance", "field_condition", target="prize"),
         },
     }
 
 # train
 splits = [
     dict(
-        train="'2008-01-01' <= race_date <= '2012-12-31'",
-        valid="'2013-01-01' <= race_date <= '2015-12-31'"
+        train="'2008-01-01' <= race_date <= '2011-12-31'",
+        valid="'2012-01-01' <= race_date <= '2013-12-31'"
     ),
     dict(
-        train="'2008-01-01' <= race_date <= '2015-12-31'",
-        valid="'2016-01-01' <= race_date <= '2018-12-31'"
+        train="'2008-01-01' <= race_date <= '2013-12-31'",
+        valid="'2014-01-01' <= race_date <= '2016-12-31'"
     ),
     dict(
-        train="'2008-01-01' <= race_date <= '2018-12-31'",
-        valid="'2019-01-01' <= race_date <= '2022-05-08'"
+        train="'2008-01-01' <= race_date <= '2016-12-31'",
+        valid="'2017-01-01' <= race_date <= '2019-12-31'"
+    ),
+    dict(
+        train="'2008-01-01' <= race_date <= '2019-12-31'",
+        valid="'2020-01-01' <= race_date <= '2022-12-31'"
     ),
 ]
 
-rank_file = "rank_model20220508v2.pickle"
+rank_file = f"rank_model{from_date}_{to_date}.pickle"
 rank_target = "score"
 rank_params = {
     "objective": "lambdarank",
@@ -148,7 +169,7 @@ rank_params = {
     "learning_rate": 0.01,
 }
 
-reg_file = "reg_model20220508v2.pickle"
+reg_file = f"reg_model{from_date}_{to_date}.pickle"
 reg_target = "prize"
 reg_params = {
     'objective': 'regression',

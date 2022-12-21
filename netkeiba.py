@@ -1,5 +1,4 @@
-import datetime
-import sqlite3
+import pathlib
 import time
 import traceback
 from functools import wraps
@@ -11,23 +10,24 @@ from bs4 import BeautifulSoup
 import chrome
 import config
 import text
+import utils
 
 BASE_URL = "https://race.netkeiba.com"
-COLUMNS = (
-    "result", "gate", "horse_no", "name", "sex", "age", "penalty", "jockey",
-    "time", "margin", "pop", "odds", "last3f", "corner", "barn", "weight",
-    "weight_change", "race_name", "start_time", "field", "distance", "turn",
+HORSE_COLUMNS = (
+    "result", "gate", "horse_no", "name", "horse_id", "sex", "age", "penalty", "jockey", "jockey_id", "time", "margin",
+    "pop", "odds", "last3f", "corner", "trainer", "trainer_id", "weight", "weight_change", "race_id"
+)
+RACE_PRE_COLUMNS = (
+    "race_id", "race_name", "start_time", "field", "distance", "turn",
     "weather", "field_condition", "race_condition", "prize1", "prize2",
     "prize3", "prize4", "prize5", "year", "place_code", "hold_num", "day_num",
-    "race_num", "race_date"
+    "race_num", "race_date",
 )
-# 長さ:36
-# (16, 4, 8, 'ロイヤルパープル', '牡', 3, 56.0, 'マーフ',
-# '1:16.0', '3/4', 2, 3.1, 39.9, '13-13', '美浦加藤征', 516,
-# 2, '3歳未勝利', '10:55', 'ダ', 1200, '右',
-# '晴', '良', 'サラ系３歳未勝利', 510, 200,
-# 130, 77, 51, 2020, 6, 1, 1,
-# 3, '1月19日(日)')
+RACE_PAY_COLUMNS = (
+    "tanno1", "tanno2", "hukuno1", "hukuno2", "hukuno3", "tan1", "tan2", "huku1", "huku2", "huku3", "wide1", "wide2", "wide3",
+    "ren", "uma1", "uma2", "puku", "san1", "san2"
+)
+RACE_AFTER_COLUMNS = RACE_PRE_COLUMNS + RACE_PAY_COLUMNS
 
 PLACE = {
     1: "札幌",
@@ -42,8 +42,6 @@ PLACE = {
     10: "小倉",
 }
 
-def date_type(date_str):
-    return datetime.datetime.strptime(date_str, "%Y-%m")
 
 def scraping(func):
     @wraps(func)
@@ -102,10 +100,16 @@ def scrape_results(race_id):
     racedata2 = text.extract_racedata2(s.find("div", class_="RaceData02"))
     racedata3 = text.extract_racedata3(race_id)
     racedate = s.find("dd", class_="Active").text
+    div_payback = s.find("div", class_="FullWrap")
+    tr_paybacks = {c: div_payback.find("tr", class_=c) for c in ("Tansho", "Fukusho", "Umaren", "Wide", "Umatan", "Fuku3", "Tan3")}
+    tanno, hukuno, payback = text.extract_payback(**tr_paybacks)
+    race_data = [race_id, racename, *racedata11, *racedata12, *racedata2, *racedata3, racedate, *tanno, *hukuno, *payback]
+    horses = []
     for horse_html in s.find_all("tr",class_="HorseList"):
-        result = text.extract_result(horse_html)
+        result = [*text.extract_result(horse_html), race_id]
         if result.count(None) != len(result):
-            yield *result, racename, *racedata11, *racedata12, *racedata2, *racedata3, racedate
+            horses.append(result)
+    return race_data, horses 
 
 @scraping
 def scrape_shutuba(race_id):
@@ -119,10 +123,13 @@ def scrape_shutuba(race_id):
     racedata2 = text.extract_racedata2(s.find("div", class_="RaceData02"))
     racedata3 = text.extract_racedata3(race_id)
     racedate = s.find("dd", class_="Active").text
+    race_data = [race_id, racename, *racedata11, *racedata12, *racedata2, *racedata3, racedate]
+    horses = []
     for horse_html in s.find_all("tr",class_="HorseList"):
-        shutuba_horse = text.extract_shutuba(horse_html)
+        shutuba_horse = [*text.extract_shutuba(horse_html), race_id]
         if shutuba_horse.count(None) != len(shutuba_horse):
-            yield *shutuba_horse, racename, *racedata11, *racedata12, *racedata2, *racedata3, racedate
+            horses.append(shutuba_horse)
+    return race_data, horses 
 
 @scraping
 def scrape_odds(driver, odds_url, convert_func=None):
@@ -212,35 +219,37 @@ def scrape_sanrenpuku_generator(driver, race_id):
     convert = lambda odds_list: {text.split_rentan(sanren): float(odds) for pop, _, sanren, odds, *_ in odds_list[1:]}
     return scrape_ninki(driver, sanrenpuku_url, convert)
 
-def daterange(from_date, to_date):
-    from_date = date_type(from_date)
-    to_date = date_type(to_date)
-    if to_date < from_date:
-        return
-    if from_date.year == to_date.year:
-        for month in range(from_date.month, to_date.month+1):
-            yield to_date.year, month
-    else:
-        for month in range(from_date.month, 12+1):
-            yield from_date.year, month
-        for year in range(from_date.year+1, to_date.year):
-            for month in range(1, 12+1):
-                yield year, month
-        for month in range(1, to_date.month+1):
-            yield to_date.year, month
 
 if __name__ == "__main__":
     with chrome.driver() as driver:
-        for year, month in daterange(config.from_date, config.to_date):
-            horses = []
+        for year, month in utils.daterange(config.from_date, config.to_date):
+            print(f"-- {year}-{month}")
+            race_file = f"netkeiba/netkeiba{year}-{month}.races.feather"
+            horse_file = f"netkeiba/netkeiba{year}-{month}.horses.feather"
+            if pathlib.Path(race_file).is_file() and pathlib.Path(horse_file).is_file():
+                print(f"already exists {race_file} and {horse_file}")
+                continue
+
+            races, horses = [], []
             try:
                 for race_date in scrape_racedates(year, month):
                     for race_id in scrape_raceids(driver, race_date):
-                        for horse in scrape_results(race_id):
-                            horses.append(horse)
-            except Exception:
-                pass
-            with sqlite3.connect(config.netkeiba_db) as conn:
-                df = pd.DataFrame(horses, columns=COLUMNS)
-                df.to_sql('horse', con=conn, if_exists='append', index=False)
-            print(f"database: inserted race data in {year}-{month}")
+                        race_data, horses_data = scrape_results(race_id)
+                        races.append(race_data)
+                        horses += horses_data
+            except Exception as e:
+                print(f"Error(race_id={race_id}): {e}")
+
+            try:
+                race_df = pd.DataFrame(races, columns=RACE_AFTER_COLUMNS)
+                race_df = utils.reduce_mem_usage(race_df)
+                race_df.to_feather(race_file)
+                print(f"saved: {year}-{month} races -> {race_file}")
+
+                horse_df = pd.DataFrame(horses, columns=HORSE_COLUMNS)
+                horse_df = utils.reduce_mem_usage(horse_df)
+                horse_df.to_feather(horse_file)
+                print(f"saved: {year}-{month} horses -> {horse_file}")
+            except Exception as e:
+                print(e)
+                import pdb; pdb.set_trace()

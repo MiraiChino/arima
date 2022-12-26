@@ -38,7 +38,6 @@ class HorseEncoder():
     def format(self, df):
         result = df.copy()
         result["race_id"] = df["race_id"].astype(int)
-        result["race_id"] = df["race_id"].astype(int)
         result["race_date"] = format_date(df["race_date"], df["year"])
         result["corner3"] = format_corner3(df["corner"])
         result["corner4"] = format_corner4(df["corner"])

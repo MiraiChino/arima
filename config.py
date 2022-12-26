@@ -1,13 +1,11 @@
-import utils
-
 # scraping
 from_date = "2008-01"
 to_date = "2022-12"
-netkeiba_horses = [f"netkeiba/netkeiba{y}-{m}.horses.feather" for y, m in utils.daterange(from_date, to_date)]
-netkeiba_races = [f"netkeiba/netkeiba{y}-{m}.races.feather" for y, m in utils.daterange(from_date, to_date)]
+netkeiba_horse_file = f"netkeiba/netkeiba{from_date}_{to_date}.horses.feather"
+netkeiba_race_file = f"netkeiba/netkeiba{from_date}_{to_date}.races.feather"
 
 # feature extraction
-encoder_file = f"encoder{from_date}_{to_date}.feather"
+encoder_file = f"encoder{from_date}_{to_date}.pickle"
 avetime_file = f"avetime{from_date}_{to_date}.feather"
 feat_file = f"feature{from_date}_{to_date}.feather"
 

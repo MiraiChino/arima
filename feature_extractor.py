@@ -3,6 +3,7 @@ from pathlib import Path
 import dill as pickle
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 import config
 import utils
@@ -183,16 +184,19 @@ def out():
     for column in cols:
         feat_files = [str(p) for p in all_feat_files if column in p.name]
         dfs = []
-        for file in feat_files:
-            print(f"\r{file}", end="")
+        print(column)
+        for file in tqdm(feat_files):
             df_chunk = pd.read_feather(file)
             dfs.append(df_chunk)
         df_feats[column] = pd.concat(dfs)
         print(f"{column} concatted")
         df_feats[column] = utils.reduce_mem_usage(df_feats[column])
         df_feats[column] = df_feats[column].sort_values("id").reset_index()
-        df_feats[column] = pd.concat([df.sort_values("horse_no") for _, df in df_feats[column].groupby(config.RACEDATE_COLUMNS)])
+        df_feats[column] = pd.concat([df.sort_values("horse_no") for _, df in df_feats[column].groupby(["race_date", "race_id"])])
+        df_feats[column] = df_feats[column].reset_index()
+        df_feats[column]["id"] = df_feats[column].index
         df_feats[column] = utils.reduce_mem_usage(df_feats[column])
+        print(df_feats[column][["id", "year", "race_date", "race_id", "horse_no"]])
     df_feat = df_feats[cols[0]]
     for column in cols[1:]:
         cols_to_use = df_feats[column].columns.difference(df_feat.columns).tolist() + ["id"]

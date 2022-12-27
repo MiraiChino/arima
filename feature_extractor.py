@@ -1,16 +1,13 @@
 from pathlib import Path
 
 import dill as pickle
-import modin.pandas as pd
 import numpy as np
-# import pandas as pd
-# import vaex
+import pandas as pd
 
 import config
 import utils
 from encoder import HorseEncoder
-# import ray                                                                                                                     
-# ray.init(runtime_env={'env_vars': {'__MODIN_AUTOIMPORT_PANDAS__': '1'}})   
+
 
 def ave(column):
     def wrapper(history, now, index):
@@ -173,7 +170,6 @@ def prepare():
 
     cols = list(feat_pattern.keys())
     for column in cols:
-        hist_list = []
         for name, hist_df in yield_history_aggdf(df_encoded, column, hist_pattern, feat_pattern[column]):
             hist_df.to_feather(f"feat/{column}_{int(name)}.feather")
             print(f"\r{column}:{name}", end="")
@@ -192,6 +188,8 @@ def out():
             df_chunk = pd.read_feather(file)
             dfs.append(df_chunk)
         df_feats[column] = pd.concat(dfs)
+        print(f"{column} concatted")
+        df_feats[column] = utils.reduce_mem_usage(df_feats[column])
         df_feats[column] = df_feats[column].sort_values("id").reset_index()
         df_feats[column] = pd.concat([df.sort_values("horse_no") for _, df in df_feats[column].groupby(config.RACEDATE_COLUMNS)])
         df_feats[column] = utils.reduce_mem_usage(df_feats[column])

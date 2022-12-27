@@ -19,7 +19,7 @@ def prepare_dataset(df, target):
     return dataset
 
 if __name__ == "__main__":
-    df_feat = pd.read_feather(config.feat_db)
+    df_feat = pd.read_feather(config.feat_file)
     df_feat = utils.reduce_mem_usage(df_feat)
     print(df_feat.head()["race_date"])
     print(df_feat.tail()["race_date"])

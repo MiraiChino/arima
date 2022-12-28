@@ -13,10 +13,10 @@ NONEED_COLUMNS = [
     "id", "index", "result", "time", "margin", "pop", "odds", "last3f", \
     "weight", "weight_change", "corner", "corner3", "corner4", \
     "year", "hold_num", "race_num", "day_num", "race_date", "race_name", \
-    "start_time", "prize1", "prize2", "prize3", "prize4", "prize5", "prize", "score", "tanshou", "hukushou"\
+    "start_time", "prize1", "prize2", "prize3", "prize4", "prize5", "prize", "tanshou", "hukushou", \
     "tanno1", "tanno2", "hukuno1", "hukuno2", "hukuno3", "tan1", "tan2", \
     "huku1", "huku2", "huku3", "wide1", "wide2", "wide3", "ren", \
-    "uma1", "uma2", "puku", "san1", "san2"
+    "uma1", "uma2", "puku", "san1", "san2", "score"
 ]
 RACEDATE_COLUMNS = ["year", "place_code", "hold_num", "day_num", "race_num"]
 

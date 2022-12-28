@@ -23,9 +23,9 @@ task_create = task.CreateBakenHTML()
 streamlog_html = str(html(
     head(
         script(f"""
-            const logserver_url = location.protocol + "//" + location.host + "/log"
+            const logserver_url = `${{location.protocol}}//${{location.host}}/log`
             const source = new EventSource(logserver_url);
-            source.onmessage = function(event) {{
+            source.onmessage = (event) => {{
                 document.getElementById("log").innerHTML += event.data + "<br>";
                 if (event.data == "{task.DONE}") {{
                     console.log("Closing connection.")
@@ -57,6 +57,25 @@ async def stream_log(request: Request):
                 i_yielded = len(logs)
     return EventSourceResponse(log_generator(request))
 
+@app.get("/", response_class=HTMLResponse)
+def start_page():
+    return str(html(body(
+        span("race_id: "),
+        input(type="number", _id="input"),
+        br(),
+        a(_id="link"),
+        script("""
+            const input = document.getElementById('input');
+            const link = document.getElementById('link');
+
+            input.oninput = (e) => {
+                const id = e.target.value;
+                link.textContent = `Go /predict/${id}`;
+                link.href = `${location.protocol}//${location.host}/predict/${id}`;
+            };
+        """)
+    )))
+
 @app.get("/predict/{race_id}", response_class=HTMLResponse)
 def predict_baken(race_id: str, request: Request, background_tasks: BackgroundTasks):
     task_id = f"/predict/{race_id}"
@@ -78,7 +97,7 @@ def predict_baken(race_id: str, request: Request, background_tasks: BackgroundTa
     return streamlog_html
 
 @app.get("/create/{race_id}", response_class=HTMLResponse)
-def create_baken_html(race_id: str, request: Request, background_tasks: BackgroundTasks,top: int=100, odd_th: float=2.0):
+def create_baken_html(race_id: str, request: Request, background_tasks: BackgroundTasks, top: int=100, odd_th: float=2.0):
     task_id = f"/create/{race_id}"
     doing_task = task.get_doing_task([task_pred, task_create])
     if doing_task and doing_task.get_id() == task_id:

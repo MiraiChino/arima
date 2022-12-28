@@ -14,3 +14,4 @@ venv/
 *.feather
 *.predict
 *.html
+*.log

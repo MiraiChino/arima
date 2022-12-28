@@ -4,7 +4,8 @@ ENV WORKDIR=/usr/workspace
 WORKDIR ${WORKDIR}
 
 COPY requirements.txt ${WORKDIR}
-RUN pip install -r requirements.txt
+RUN pip install -U pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 FROM dev as deploy
 COPY . ${WORKDIR}

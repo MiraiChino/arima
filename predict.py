@@ -1,7 +1,6 @@
 import argparse
 import itertools
 import math
-import sqlite3
 from dataclasses import dataclass, field
 
 import dill as pickle
@@ -13,7 +12,6 @@ import chrome
 import config
 import feature_extractor
 import netkeiba
-import utils
 
 
 def parse_args():
@@ -110,36 +108,32 @@ def result_prob(df, task_logs=[]):
     task_logs.append(f"loading {config.encoder_file}")
     with open(config.encoder_file, "rb") as f:
         netkeiba_encoder = pickle.load(f)
+    task_logs.append(f"encoding")
     df_format = netkeiba_encoder.format(df)
     df_encoded = netkeiba_encoder.transform(df_format)
+    race_date = df_encoded["race_date"][0]
+
+    task_logs.append(f"loading {config.avetime_file}")
+    df_avetime = pd.read_feather(config.avetime_file)
+    ave_time = {(f, d, fc): t for f, d, fc, t in df_avetime.to_dict(orient="split")["data"]}
+    hist_pattern = config.hist_pattern
+    feat_pattern = config.feature_pattern(ave_time)
+
+    task_logs.append(f"loading {config.feat_file}")
+    history = pd.read_feather(config.feat_file)
+    task_logs.append(f"searching race history")
+
+    condition = " or ".join(f"{column}=={df_encoded[column].tolist()}" for column in feat_pattern.keys())
+    hist = history.query(f"race_date < '{race_date}' and ({condition})")
+    hist["race_date"] = pd.to_datetime(hist["race_date"])
+    hist = hist.sort_values("race_date")
+    hist = hist.loc[:, :'score']
     df_feat = pd.DataFrame()
-    task_logs.append(f"connecting {config.feat_db}")
-    with sqlite3.connect(config.feat_db) as conn:
-        df_avetime = pd.read_sql_query(f"SELECT * FROM ave_time", conn)
-        ave_time = {(f, d, fc): t for f, d, fc, t in df_avetime.to_dict(orient="split")["data"]}
-        hist_pattern = config.hist_pattern
-        feat_pattern = config.feature_pattern(ave_time)
-        race_date = df_encoded["race_date"][0]
-        condition = " OR ".join(f"{column}=={row[column]}" for _, row in df_encoded.iterrows() for column in feat_pattern.keys())
-        c_size = 10000
-        reader = pd.read_sql_query(f"SELECT * FROM horse WHERE race_date < '{race_date}' AND ({condition})", conn, chunksize=c_size)
-        chunks = []
-        total_loaded = 0
-        task_logs.append(f"loading race history from {config.feat_db}")
-        for df_chunk in reader:
-            df_chunk_reduced = utils.reduce_mem_usage(df_chunk, verbose=True)
-            h, w = df_chunk_reduced.shape
-            total_loaded += h
-            task_logs.append(f"loaded {total_loaded} rows from {config.feat_db}")
-            chunks.append(df_chunk_reduced)
-        hist = pd.concat(chunks, ignore_index=True)
-        hist["race_date"] = pd.to_datetime(hist["race_date"])
-        hist = hist.sort_values("race_date")
-        hist = hist.loc[:, :'score']
-        for index, row in df_encoded.iterrows():
-            df_agg = feature_extractor.search_history(row, hist_pattern, feat_pattern, hist)
-            df_feat = pd.concat([df_feat, df_agg])
-    df_feat = df_feat.drop(columns=config.NONEED_COLUMNS)
+    for index, row in df_encoded.iterrows():
+        df_agg = feature_extractor.search_history(row, hist_pattern, feat_pattern, hist)
+        df_feat = pd.concat([df_feat, df_agg])
+    noneed_columns = [c for c in config.NONEED_COLUMNS if c not in netkeiba.RACE_PAY_COLUMNS]
+    df_feat = df_feat.drop(columns=noneed_columns)
     probs = []
     model_files = [f"{i}_{file}" for file in (config.rank_file, config.reg_file) for i in range(len(config.splits))]
     task_logs.append(f"predict")
@@ -302,8 +296,10 @@ def good_baken(baken, odd_th=2.0):
 
 if __name__ == "__main__":
     args = parse_args()
-    horses = [horse for horse in netkeiba.scrape_shutuba(args.race_id)]
-    df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
+    race_data, horses = netkeiba.scrape_shutuba(args.race_id)
+    df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
+    df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_PRE_COLUMNS)
+    df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
     print(df_original)
     p = result_prob(df_original)
     print(p)

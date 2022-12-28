@@ -16,4 +16,6 @@ arima.ipynb
 Dockerfile
 docker-compose.yml
 docker-compose.deploy.yml
-netkeiba/.gitkeep
+netkeiba
+feat
+train1228.log

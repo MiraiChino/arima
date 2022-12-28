@@ -96,7 +96,7 @@ sniffio==1.2.0
 sortedcontainers==2.4.0
 soupsieve==2.3.1
 sqlite-web==0.4.0
-sse-starlette==0.10.3
+sse-starlette==0.1.0
 starlette==0.17.1
 terminado==0.12.1
 testpath==0.5.0

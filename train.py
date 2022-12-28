@@ -14,13 +14,14 @@ def prepare_dataset(df, target):
     query = df.groupby(config.RACEDATE_COLUMNS)["name"].count().values.tolist()
     print(len(query))
     x = df.drop(columns=noneed_columns)
+    print(len(x.columns.tolist()))
     y = x.pop(target)
+    print(x[["race_id", "horse_no"]])
     dataset = Dataset(x, y, group=query)
     return dataset
 
 if __name__ == "__main__":
     df_feat = pd.read_feather(config.feat_file)
-    df_feat = utils.reduce_mem_usage(df_feat)
     print(df_feat.head()[["id", "year", "race_date", "race_id", "horse_no"]])
     print(df_feat.tail()[["id", "year", "race_date", "race_id", "horse_no"]])
 

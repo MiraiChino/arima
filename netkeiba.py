@@ -242,12 +242,10 @@ if __name__ == "__main__":
 
             try:
                 race_df = pd.DataFrame(races, columns=RACE_AFTER_COLUMNS)
-                race_df = utils.reduce_mem_usage(race_df)
                 race_df.to_feather(race_file)
                 print(f"saved: {year}-{month} races -> {race_file}")
 
                 horse_df = pd.DataFrame(horses, columns=HORSE_COLUMNS)
-                horse_df = utils.reduce_mem_usage(horse_df)
                 for c in RACE_PAY_COLUMNS:
                     horse_df[c] = horse_df[c].astype(object)
                 horse_df.to_feather(horse_file)
@@ -262,6 +260,8 @@ if __name__ == "__main__":
         race_chunks.append(pd.read_feather(f"netkeiba/netkeiba{year}-{month}.races.feather"))
         horse_chunks.append(pd.read_feather(f"netkeiba/netkeiba{year}-{month}.horses.feather"))
     df = pd.concat(race_chunks, ignore_index=True)
+    df = utils.reduce_mem_usage(df)
     df.to_feather(config.netkeiba_race_file)
     df = pd.concat(horse_chunks, ignore_index=True)
+    df = utils.reduce_mem_usage(df)
     df.to_feather(config.netkeiba_horse_file)

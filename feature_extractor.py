@@ -159,7 +159,6 @@ def prepare():
     horse_encoder = HorseEncoder()
     df_format = horse_encoder.format(df_original)
     df_encoded = horse_encoder.fit_transform(df_format)
-    df_encoded = utils.reduce_mem_usage(df_encoded)
     with open(config.encoder_file, "wb") as f:
         pickle.dump(horse_encoder, f)
     
@@ -190,12 +189,10 @@ def out():
             dfs.append(df_chunk)
         df_feats[column] = pd.concat(dfs)
         print(f"{column} concatted")
-        df_feats[column] = utils.reduce_mem_usage(df_feats[column])
-        df_feats[column] = df_feats[column].sort_values("id").reset_index()
+        df_feats[column] = df_feats[column].sort_values("id").reset_index(drop=True)
         df_feats[column] = pd.concat([df.sort_values("horse_no") for _, df in df_feats[column].groupby(["race_date", "race_id"])])
-        df_feats[column] = df_feats[column].reset_index()
+        df_feats[column] = df_feats[column].reset_index(drop=True)
         df_feats[column]["id"] = df_feats[column].index
-        df_feats[column] = utils.reduce_mem_usage(df_feats[column])
         print(df_feats[column][["id", "year", "race_date", "race_id", "horse_no"]])
     df_feat = df_feats[cols[0]]
     for column in cols[1:]:

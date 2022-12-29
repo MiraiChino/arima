@@ -1,8 +1,8 @@
 # scraping
 from_date = "2008-01"
 to_date = "2022-12"
-netkeiba_horse_file = f"netkeiba/netkeiba{from_date}_{to_date}.horses.feather"
-netkeiba_race_file = f"netkeiba/netkeiba{from_date}_{to_date}.races.feather"
+netkeiba_horse_file = f"netkeiba{from_date}_{to_date}.horses.feather"
+netkeiba_race_file = f"netkeiba{from_date}_{to_date}.races.feather"
 
 # feature extraction
 encoder_file = f"encoder{from_date}_{to_date}.pickle"

@@ -1,11 +1,13 @@
-import pathlib
+import re
 import time
 import traceback
 from functools import wraps
+from pathlib import Path
 
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 
 import chrome
 import config
@@ -41,6 +43,9 @@ PLACE = {
     9: "阪神",
     10: "小倉",
 }
+
+netkeiba_date = re.compile(r"netkeiba(\d+)-(\d+).*")
+
 
 
 def scraping(func):
@@ -221,12 +226,20 @@ def scrape_sanrenpuku_generator(driver, race_id):
 
 
 if __name__ == "__main__":
+    last_updated = sorted(Path("netkeiba").iterdir(), key=lambda p: p.stat().st_mtime)[-1]
+    if match := netkeiba_date.match(last_updated.stem):
+        year, month = match.groups()
+        Path(f"netkeiba/netkeiba{year}-{month}.races.feather").unlink(missing_ok=True)
+        print(f"remove netkeiba/netkeiba{year}-{month}.races.feather")
+        Path(f"netkeiba/netkeiba{year}-{month}.horses.feather").unlink(missing_ok=True)
+        print(f"remove netkeiba/netkeiba{year}-{month}.horses.feather")
+
     with chrome.driver() as driver:
         for year, month in utils.daterange(config.from_date, config.to_date):
             print(f"-- {year}-{month}")
             race_file = f"netkeiba/netkeiba{year}-{month}.races.feather"
             horse_file = f"netkeiba/netkeiba{year}-{month}.horses.feather"
-            if pathlib.Path(race_file).is_file() and pathlib.Path(horse_file).is_file():
+            if Path(race_file).is_file() and Path(horse_file).is_file():
                 print(f"already exists {race_file} and {horse_file}")
                 continue
 
@@ -246,8 +259,6 @@ if __name__ == "__main__":
                 print(f"saved: {year}-{month} races -> {race_file}")
 
                 horse_df = pd.DataFrame(horses, columns=HORSE_COLUMNS)
-                for c in RACE_PAY_COLUMNS:
-                    horse_df[c] = horse_df[c].astype(object)
                 horse_df.to_feather(horse_file)
                 print(f"saved: {year}-{month} horses -> {horse_file}")
             except Exception as e:
@@ -255,8 +266,7 @@ if __name__ == "__main__":
                 import pdb; pdb.set_trace()
 
     race_chunks, horse_chunks = [], []
-    for year, month in utils.daterange(config.from_date, config.to_date):
-        print(f"-- {year}-{month}")
+    for year, month in tqdm(list(utils.daterange(config.from_date, config.to_date))):
         race_chunks.append(pd.read_feather(f"netkeiba/netkeiba{year}-{month}.races.feather"))
         horse_chunks.append(pd.read_feather(f"netkeiba/netkeiba{year}-{month}.horses.feather"))
     df = pd.concat(race_chunks, ignore_index=True)

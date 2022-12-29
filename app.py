@@ -27,7 +27,7 @@ streamlog_html = str(html(
             const source = new EventSource(logserver_url);
             source.onmessage = (event) => {{
                 document.getElementById("log").innerHTML += event.data + "<br>";
-                if (event.data == "{task.DONE}") {{
+                if (event.data.includes("{task.DONE}")) {{
                     console.log("Closing connection.")
                     source.close()
                 }}
@@ -82,6 +82,8 @@ def predict_baken(race_id: str, request: Request, background_tasks: BackgroundTa
     doing_task = task.get_doing_task([task_pred, task_create])
     if doing_task and doing_task.get_id() == task_id:
         return streamlog_html
+    elif doing_task and doing_task.get_id() == task.NO_ID:
+        pass
     elif doing_task and doing_task.get_id() != task_id:
         return str(html(body(a(f"Doing {doing_task.get_id()}.", _href=f"{request.base_url}{doing_task.get_id()[1:]}"))))
 
@@ -102,6 +104,8 @@ def create_baken_html(race_id: str, request: Request, background_tasks: Backgrou
     doing_task = task.get_doing_task([task_pred, task_create])
     if doing_task and doing_task.get_id() == task_id:
         return streamlog_html
+    elif doing_task and doing_task.get_id() == task.NO_ID:
+        pass
     elif doing_task and doing_task.get_id() != task_id:
         return str(html(body(a(f"Doing {doing_task.get_id()}.", _href=f"{request.base_url}{doing_task.get_id()[1:]}"))))
     
@@ -126,9 +130,12 @@ def create_baken_html(race_id: str, request: Request, background_tasks: Backgrou
 @app.get("/update/{race_id}", response_class=HTMLResponse)
 def create_baken_html(race_id: str, request: Request, background_tasks: BackgroundTasks, top: int=100, odd_th: float=2.0):
     task_id = f"/update/{race_id}"
+    task_create.init()
     doing_task = task.get_doing_task([task_pred, task_create])
     if doing_task and doing_task.get_id() == task_id:
         return streamlog_html
+    elif doing_task and doing_task.get_id() == task.NO_ID:
+        pass
     elif doing_task and doing_task.get_id() != task_id:
         return str(html(body(a(f"Doing {doing_task.get_id()}.", _href=f"{request.base_url}{doing_task.get_id()[1:]}"))))
     
@@ -139,6 +146,7 @@ def create_baken_html(race_id: str, request: Request, background_tasks: Backgrou
             a(f"Go /predict/{race_id}", _href=f"{request.base_url}predict/{race_id}"),
         )))
     
+    print("dow update")
     task_create.init()
     background_tasks.add_task(task_create, task_id, race_id, top, odd_th, next_url=f"{request.base_url}result/{race_id}")
     return streamlog_html

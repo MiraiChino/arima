@@ -12,6 +12,7 @@ import netkeiba
 import predict
 
 DONE = "-- DONE"
+NO_ID = 'no_id'
 
 class DotDict(dict):
     def __init__(self, *args, **kwargs):
@@ -24,9 +25,10 @@ class Logs(list):
         super(Logs, self).append(f"{now}  {val}")
 
 class Task():
-    id = ''
+    id = NO_ID
     logs = Logs()
-    race_id = 'no_id'
+    race_id = NO_ID
+    doing = False
 
     def get_id(self):
         return self.id
@@ -36,10 +38,15 @@ class Task():
 
     def init(self):
         self.logs = Logs()
-        self.race_id = "no_id"
+        self.race_id = NO_ID
+        self.doing = False
+
+    def done(self):
+        self.doing = False
+        self.logs.append(DONE)
 
     def is_doing(self):
-        return self.logs and self.logs[-1] != DONE
+        return self.doing
     
     def get_raceid(self):
         return self.race_id
@@ -54,20 +61,23 @@ class PredictBaken(Task):
     def __call__(self, id, race_id, next_url):
         self.id = id
         self.race_id = race_id
+        self.doing = True
         self.logs.append(f"-- START {id}")
         baken_pickle = pathlib.Path(f"{race_id}.predict")
         try:
             if not race_id:
                 self.logs.append(f"Invalid race_id.")
-                self.logs.append(DONE)
+                self.done()
                 return
             if baken_pickle.is_file():
                 self.logs.append(f"Already {baken_pickle} exists.")
-                self.logs.append(DONE)
+                self.done()
                 return
             self.logs.append(f"scraping: https://race.netkeiba.com/race/shutuba.html?race_id={race_id}")
-            horses = [horse for horse in netkeiba.scrape_shutuba(race_id)]
-            df_original = pd.DataFrame(horses, columns=netkeiba.COLUMNS)
+            race_data, horses = netkeiba.scrape_shutuba(race_id)
+            df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
+            df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_PRE_COLUMNS)
+            df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
             race_info = DotDict(df_original.loc[0, :].to_dict())
             if df_original['horse_no'].isnull().sum() == len(df_original['horse_no']):
                 self.logs.append(f"assign temporary horse number because failed to scrape it")
@@ -84,7 +94,7 @@ class PredictBaken(Task):
                 pickle.dump((baken, race_info), f)
             self.logs.append(f"{baken_pickle} saved")
             self.logs.append(f"<a href='{next_url}'>Go /create/{race_id}</a>")
-            self.logs.append(DONE)
+            self.done()
         except Exception as e:
             self.logs.append(f"{traceback.format_exc()}")
 
@@ -93,6 +103,7 @@ class CreateBakenHTML(Task):
     def __call__(self, id, race_id, top, odd_th, next_url):
         self.id = id
         self.race_id = race_id
+        self.doing = True
         self.logs.append(f"-- START {id}")
         baken_html = pathlib.Path(f"{race_id}.html")
         try:
@@ -173,6 +184,6 @@ class CreateBakenHTML(Task):
                 f.write(page)
             self.logs.append(f"{baken_html} saved")
             self.logs.append(f"<a href='{next_url}'>Go /result/{race_id}</a>")
-            self.logs.append(DONE)
+            self.done()
         except Exception as e:
             self.logs.append(f"{traceback.format_exc()}")

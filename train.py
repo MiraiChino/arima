@@ -11,6 +11,10 @@ def prepare_dataset(df, target):
     noneed_columns = config.NONEED_COLUMNS.copy()
     if target in noneed_columns:
         noneed_columns.remove(target)
+    cols = df.columns.tolist()
+    for c in noneed_columns:
+        if c not in cols:
+            noneed_columns.remove(c)
     query = df.groupby(config.RACEDATE_COLUMNS)["name"].count().values.tolist()
     print(len(query))
     x = df.drop(columns=noneed_columns)

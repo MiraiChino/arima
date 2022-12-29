@@ -306,7 +306,7 @@ if __name__ == "__main__":
     names = {no: name for no, name in zip(df_original["horse_no"].to_list(), df_original["name"].to_list())}
     baken = baken_prob(p, names)
     baken = calc_odds(baken, args.race_id, top=100)
-    baken = good_baken(baken, odds_th=2.0)
+    baken = good_baken(baken, odd_th=2.0)
     for b_type, b in baken.items():
         print(b_type)
         print(b.df)

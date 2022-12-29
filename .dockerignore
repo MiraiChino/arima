@@ -18,4 +18,4 @@ docker-compose.yml
 docker-compose.deploy.yml
 netkeiba
 feat
-train1228.log
+train.log

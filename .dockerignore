@@ -19,4 +19,5 @@ docker-compose.deploy.yml
 netkeiba
 feat
 train.log
+netkeiba.log
 update.sh

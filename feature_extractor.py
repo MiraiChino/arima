@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 
 import dill as pickle
@@ -9,6 +10,11 @@ import config
 import utils
 from encoder import HorseEncoder
 
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--update", action="store_true")
+    return parser.parse_args()
 
 def ave(column):
     def wrapper(history, now, index):
@@ -99,7 +105,8 @@ def agg_history_i(i, funcs, hist_pattern, history, index):
             last_jrace_fresult = np.array([f(past_hist[:1+j, :], row, index) for f in funcs for j in hist_pattern])
             return last_jrace_fresult
         except Exception as e:
-            print(e)
+            import traceback
+            print(traceback.format_exc())
             return no_hist
     else:
         return no_hist
@@ -154,7 +161,6 @@ def prepare():
     df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
     if "index" in df_original.columns:
         df_original = df_original.drop(columns="index")
-    df_original["id"] = df_original.index
 
     horse_encoder = HorseEncoder()
     df_format = horse_encoder.format(df_original)
@@ -189,7 +195,6 @@ def out():
             dfs.append(df_chunk)
         df_feats[column] = pd.concat(dfs)
         print(f"{column} concatted")
-        df_feats[column] = df_feats[column].sort_values("id").reset_index(drop=True)
         df_feats[column] = pd.concat([df.sort_values("horse_no") for _, df in df_feats[column].groupby(["race_date", "race_id"])])
         df_feats[column] = df_feats[column].reset_index(drop=True)
         df_feats[column]["id"] = df_feats[column].index
@@ -201,7 +206,58 @@ def out():
     df_feat = utils.reduce_mem_usage(df_feat)
     df_feat.to_feather(config.feat_file)
 
+def update():
+    if not Path("netkeiba.log").exists():
+        print(f"no {config.encoder_file}")
+        return
+    with open("netkeiba.log", 'r') as f:
+        filenames = f.readlines()
+
+    dfs = []
+    for filename in filenames:
+        df_races = pd.read_feather(f"{filename}.races.feather")
+        df_horses = pd.read_feather(f"{filename}.horses.feather")
+        df = pd.merge(df_horses, df_races, on='race_id', how='left')
+        dfs.append(df)
+    df_original = pd.concat(dfs)
+    if "index" in df_original.columns:
+        df_original = df_original.drop(columns="index")
+
+    if not Path(config.encoder_file).exists():
+        print(f"no {config.encoder_file}")
+        return
+    with open(config.encoder_file, "rb") as f:
+        horse_encoder = pickle.load(f)
+    df_format = horse_encoder.format(df_original)
+    df_encoded = horse_encoder.transform(df_format)
+
+    df_avetime = pd.read_feather(config.avetime_file)
+    ave_time = {(f, d, fc): t for f, d, fc, t in df_avetime.to_dict(orient="split")["data"]}
+    feat_pattern = config.feature_pattern(ave_time)
+    funcs = list(feat_pattern.values())
+    cols = list(feat_pattern.keys())
+    for column in cols:
+        print(column)
+        past_columns = [f"{col}_{x}" for col in list(feat_pattern[column].keys()) for x in config.hist_pattern]
+        for _, row in tqdm(list(df_encoded.iterrows())):
+            try:
+                name = int(row[column])
+                df_feat = pd.read_feather(f"feat/{column}_{name}.feather")
+                df_hist = df_feat.drop(columns=past_columns)
+                # TODO: 必ず追加するようになっているので、同じ行があったら削除する
+                df_agg = search_history(row, config.hist_pattern, feat_pattern, df_hist)
+                new_feat = pd.concat([df_feat, df_agg]).reset_index(drop=True)
+            except:
+                print(f"didn't update feat/{column}_{name}.feather")
+            else:
+                pass
+                # new_feat.to_feather(f"feat/{column}_{name}.feather")
 
 if __name__ == "__main__":
-    prepare()
-    out()
+    args = parse_args()
+    if args.update:
+        update()
+        # out()
+    else:
+        prepare()
+        out()

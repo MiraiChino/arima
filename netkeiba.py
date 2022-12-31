@@ -226,6 +226,9 @@ def scrape_sanrenpuku_generator(driver, race_id):
 
 
 if __name__ == "__main__":
+    netkeiba_log = Path("netkeiba.log")
+    netkeiba_log.unlink(missing_ok=True)
+
     last_updated = sorted(Path("netkeiba").iterdir(), key=lambda p: p.stat().st_mtime)[-1]
     if match := netkeiba_date.match(last_updated.stem):
         year, month = match.groups()
@@ -261,6 +264,10 @@ if __name__ == "__main__":
                 horse_df = pd.DataFrame(horses, columns=HORSE_COLUMNS)
                 horse_df.to_feather(horse_file)
                 print(f"saved: {year}-{month} horses -> {horse_file}")
+
+                with open(netkeiba_log, 'a') as f:
+                    f.write(f"netkeiba/netkeiba{year}-{month}")
+
             except Exception as e:
                 print(e)
                 import pdb; pdb.set_trace()

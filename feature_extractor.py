@@ -234,20 +234,42 @@ def update():
     df_avetime = pd.read_feather(config.avetime_file)
     ave_time = {(f, d, fc): t for f, d, fc, t in df_avetime.to_dict(orient="split")["data"]}
     feat_pattern = config.feature_pattern(ave_time)
-    funcs = list(feat_pattern.values())
     cols = list(feat_pattern.keys())
     for column in cols:
         print(column)
         past_columns = [f"{col}_{x}" for col in list(feat_pattern[column].keys()) for x in config.hist_pattern]
-        for _, row in tqdm(list(df_encoded.iterrows())):
+        funcs = list(feat_pattern[column].values())
+
+        for name in tqdm(df_encoded[column].unique()):
+        # for _, row in tqdm(list(df_encoded.iterrows())):
             try:
-                name = int(row[column])
-                df_feat = pd.read_feather(f"feat/{column}_{name}.feather")
-                df_hist = df_feat.drop(columns=past_columns)
+                # name = int(row[column])
+                df_feat = pd.read_feather(f"feat/{column}_{int(name)}.feather")
+                pre_hist = df_feat.drop(columns=past_columns)
                 # TODO: 必ず追加するようになっているので、同じ行があったら削除する
-                df_agg = search_history(row, config.hist_pattern, feat_pattern, df_hist)
-                new_feat = pd.concat([df_feat, df_agg]).reset_index(drop=True)
+                # TODO: 同じ馬を何回も計算してる
+                rows = df_encoded.query(f"{column}=={name}")
+                hist = pd.concat([pre_hist, rows])
+                hist_nodup = hist.drop_duplicates(subset=['result', 'gate', 'horse_no', 'name', 'race_date', 'prize'])
+                if len(hist_nodup) <= len(pre_hist):
+                    continue
+                print(len(hist_nodup), len(pre_hist))
+                a, columns, index = df2np(hist_nodup)
+                print(df_feat[["result", "horse_no", "name", "prize", "horse_prize_999999"]])
+                print(hist_nodup[["result", "horse_no", "name", "prize"]])
+                import pdb; pdb.set_trace()
+                # ここからは未確認
+                for i in range(len(pre_hist), len(hist_nodup)):
+                    targetrow_agg = agg_history_i(i, funcs, config.hist_pattern, a, index)
+                    row_df_column = pd.DataFrame([targetrow_agg], columns=past_columns)
+                    import pdb; pdb.set_trace()
+                    
+                    # hist_df = pd.concat([hist_df, row_df_column], axis="columns")
+                    # df_agg = search_history(row, config.hist_pattern, feat_pattern, df_hist)
+                    # new_feat = pd.concat([df_feat, df_agg]).reset_index(drop=True)
             except:
+                import traceback
+                print(traceback.format_exc())
                 print(f"didn't update feat/{column}_{name}.feather")
             else:
                 pass

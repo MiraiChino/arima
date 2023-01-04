@@ -233,8 +233,14 @@ def pretty_baken(baken, top=100):
         probs = list(b.prob.values())[:top]
         b.nums = b.nums[:top]
         cum_probs = cumulative_prob(probs)
+        odds = []
+        for nums in b.nums:
+            try:
+                odds.append(b.odds[nums])
+            except Exception as e:
+                print(f"{e}: Not found {nums}")
         b.df["確率"] = pd.Series([f"{p*100:.2f}%" for p in b.df["確率"].values])
-        b.df["オッズ"] = pd.Series([b.odds[nums] for nums in b.nums])
+        b.df["オッズ"] = pd.Series(odds)
         b.df["期待値"] = b.df["オッズ"] * pd.Series(probs)
         b.df["期待値"] = pd.Series([round(p, 2) for p in b.df["期待値"].values])
         b.df["累積確率"] = pd.Series([f"{p*100:.2f}%" for p in cum_probs])

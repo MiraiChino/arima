@@ -156,7 +156,15 @@ def scrape_odds(driver, odds_url, convert_func=None):
 def scrape_tanhuku(driver, race_id):
     tanhuku_url = f"{BASE_URL}/odds/index.html?race_id={race_id}"
     to_float = lambda huku_str: round(sum(float(h) for h in huku_str.split('-'))/2, 1)
-    convert = lambda odds_list: [(int(no), float(tan), to_float(huku)) for pop, waku, no, _, name, tan, huku, _ in odds_list]
+    def convert(odds_list):
+        result = []
+        for odds in odds_list:
+            try:
+                pop, waku, no, _, name, tan, huku, _ = odds
+                result.append((int(no), float(tan), to_float(huku)))
+            except Exception as e:
+                print(f"{e}: {odds}")
+        return result
     tanhuku_odds = scrape_odds(driver, tanhuku_url, convert)
     tanshou_odds = {no: tan for no, tan, huku in tanhuku_odds}
     hukushou_odds = {no: huku for no, tan, huku in tanhuku_odds}
@@ -173,10 +181,17 @@ def scrape_12odds(driver, url, odds_convert=None):
             col_label = table.find_element_by_css_selector("tr.col_label")
             no2 = int(text.remove_trash(col_label.text))
             odds_list = text.extract_odds(table.get_attribute("innerHTML"))
-            if odds_convert:
-                no12_odds += [(no2, int(no3), float(odds_convert(odds))) for no3, odds, _ in odds_list]
-            else:
-                no12_odds += [(no2, int(no3), float(odds)) for no3, odds, _ in odds_list]
+            converted_odds = []
+            for odds in odds_list:
+                try:
+                    no3, odds, _ = odds
+                    if odds_convert:
+                        converted_odds.append((no2, int(no3), float(odds_convert(odds))))
+                    else:
+                        converted_odds.append((no2, int(no3), float(odds)))
+                except Exception as e:
+                    print(f"{e}: ")
+            no12_odds += converted_odds
         for no1, no2, odds in no12_odds:
             umaren_odds[(no1, no2)] = odds
     return umaren_odds
@@ -216,12 +231,28 @@ def scrape_ninki(driver, ninki_url, convert_func=None):
 
 def scrape_sanrentan_generator(driver, race_id):
     sanrentan_url = f"{BASE_URL}/odds/index.html?type=b8&race_id={race_id}&&housiki=c99"
-    convert = lambda odds_list: {text.split_rentan(sanren): float(odds) for pop, _, sanren, odds, *_ in odds_list[1:]}
+    def convert(odds_list):
+        result = {}
+        for odds in odds_list[1:]:
+            try:
+                pop, _, sanren, odds, *_ = odds
+                result[text.split_rentan(sanren)] = float(odds)
+            except Exception as e:
+                print(f"{e}: {odds}")
+        return result
     return scrape_ninki(driver, sanrentan_url, convert)
 
 def scrape_sanrenpuku_generator(driver, race_id):
     sanrenpuku_url = f"{BASE_URL}/odds/index.html?type=b7&race_id={race_id}&housiki=c99"
-    convert = lambda odds_list: {text.split_rentan(sanren): float(odds) for pop, _, sanren, odds, *_ in odds_list[1:]}
+    def convert(odds_list):
+        result = {}
+        for odds in odds_list[1:]:
+            try:
+                pop, _, sanren, odds, *_ = odds
+                result[text.split_rentan(sanren)] = float(odds)
+            except Exception as e:
+                print(f"{e}: {odds}")
+        return result
     return scrape_ninki(driver, sanrenpuku_url, convert)
 
 
@@ -230,6 +261,8 @@ if __name__ == "__main__":
     netkeiba_log.unlink(missing_ok=True)
 
     last_updated = sorted(Path("netkeiba").iterdir(), key=lambda p: p.stat().st_mtime)[-1]
+    if ".DS_Store" in last_updated.stem:
+        last_updated = sorted(Path("netkeiba").iterdir(), key=lambda p: p.stat().st_mtime)[-2]
     if match := netkeiba_date.match(last_updated.stem):
         year, month = match.groups()
         Path(f"netkeiba/netkeiba{year}-{month}.races.feather").unlink(missing_ok=True)

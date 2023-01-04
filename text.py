@@ -242,6 +242,10 @@ def extract_shutuba(text):
     text = bracket_l.sub("", text)
     text = bracket_r.sub("", text)
     gate, horse_no, _, name, sa, penalty, jockey, trainer, *_ = text.split(",")
+    try:
+        penalty = float(penalty)
+    except:
+        penalty = None
 
     try:
         if gate and horse_no:

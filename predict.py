@@ -260,13 +260,13 @@ def calc_odds(baken, race_id, top=100, task_logs=[]):
             try:
                 baken["三連単"].odds |= next(sanrentan_odds_gen)
             except StopIteration:
-                pass
+                break
         task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?type=b7&race_id={race_id}")
         while not tuples1_in_tuples2(baken["三連複"].nums[:top], list(baken["三連複"].odds.keys())):
             try:
                 baken["三連複"].odds |= next(sanrenpuku_odds_gen)
             except StopIteration:
-                pass
+                break
     return baken
 
 def good_baken(baken, odd_th=2.0):
@@ -306,6 +306,7 @@ if __name__ == "__main__":
     names = {no: name for no, name in zip(df_original["horse_no"].to_list(), df_original["name"].to_list())}
     baken = baken_prob(p, names)
     baken = calc_odds(baken, args.race_id, top=100)
+    baken = pretty_baken(baken, top=100)
     baken = good_baken(baken, odd_th=2.0)
     for b_type, b in baken.items():
         print(b_type)

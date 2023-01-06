@@ -185,6 +185,8 @@ def prepare():
     cols = list(feat_pattern.keys())
     for column in cols:
         for name, hist_df in yield_history_aggdf(df_encoded, column, hist_pattern, feat_pattern[column]):
+            if not name:
+                name = -1
             hist_df.to_feather(f"feat/{column}_{int(name)}.feather")
             print(f"\r{column}:{name}", end="")
 

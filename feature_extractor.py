@@ -130,8 +130,16 @@ def yield_history_aggdf(df, target, hist_pattern, feat_pattern):
     a, columns, index = df2np(df)
 
     for name, hist in extract_samevalue(a, target_index=index(target)):
+        if len(hist) == 0:
+            continue
         a_agghist = agg_history(funcs, hist_pattern, hist, index)
-        hist_df = pd.DataFrame(np.concatenate([hist, a_agghist], axis=1), columns=columns+past_columns)
+        try:
+            all_hist = np.column_stack((hist, a_agghist))
+            hist_df = pd.DataFrame(all_hist, columns=columns+past_columns)
+        except:
+            import traceback
+            print(traceback.format_exc())
+            import pdb; pdb.set_trace()
         yield name, hist_df
 
 def search_history(target_row, hist_pattern, feat_pattern, df):
@@ -231,6 +239,7 @@ def update():
     df_format = horse_encoder.format(df_original)
     df_encoded = horse_encoder.transform(df_format)
 
+    # TODO: avetimeを再計算する
     df_avetime = pd.read_feather(config.avetime_file)
     ave_time = {(f, d, fc): t for f, d, fc, t in df_avetime.to_dict(orient="split")["data"]}
     feat_pattern = config.feature_pattern(ave_time)
@@ -241,16 +250,18 @@ def update():
         funcs = list(feat_pattern[column].values())
 
         for name in tqdm(df_encoded[column].unique()):
-        # for _, row in tqdm(list(df_encoded.iterrows())):
             try:
-                # name = int(row[column])
+                print(f"{column}_{int(name)}")
+                # TODO: なかったら新しく作る
                 df_feat = pd.read_feather(f"feat/{column}_{int(name)}.feather")
                 pre_hist = df_feat.drop(columns=past_columns)
                 # TODO: 必ず追加するようになっているので、同じ行があったら削除する
                 # TODO: 同じ馬を何回も計算してる
+                # TODO: 馬１匹のfeatを１つ減らしてためす
                 rows = df_encoded.query(f"{column}=={name}")
                 hist = pd.concat([pre_hist, rows])
                 hist_nodup = hist.drop_duplicates(subset=['result', 'gate', 'horse_no', 'name', 'race_date', 'prize'])
+                print(len(hist_nodup), len(pre_hist))
                 if len(hist_nodup) <= len(pre_hist):
                     continue
                 print(len(hist_nodup), len(pre_hist))

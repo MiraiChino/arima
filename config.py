@@ -26,7 +26,7 @@ def feature_pattern(ave_time):
     from feature_extractor import (ave, distance_prize, interval, same_ave,
                                    same_count, same_drize, time)
     return {
-        "name": {
+        "horse_id": {
             "horse_interval": interval,
             "horse_odds": ave("odds"),
             "horse_pop": ave("pop"),
@@ -74,7 +74,7 @@ def feature_pattern(ave_time):
             "horse_pfcdrize": same_drize("place_code", "field", "field_condition"),
             "horse_pfctdrize": same_drize("place_code", "field", "field_condition", "turn"),
         },
-        "jockey": {
+        "jockey_id": {
             "jockey_interval": interval,
             "jockey_odds": ave("odds"),
             "jockey_pop": ave("pop"),
@@ -106,7 +106,7 @@ def feature_pattern(ave_time):
             "jockey_pfdcprize": same_ave("place_code", "field", "distance", "field_condition", target="prize"),
             "jockey_pfdtprize": same_ave("place_code", "field", "distance", "turn", target="prize"),
         },
-        "trainer": {
+        "trainer_id": {
             "trainer_interval": interval,
             "trainer_odds": ave("odds"),
             "trainer_pop": ave("pop"),

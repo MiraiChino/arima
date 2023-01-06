@@ -39,12 +39,18 @@ def extract_result(text):
     try:
         if match := horse_id.search(text):
             h_id = match.groups()[0]
+    except Exception as e:
+        print(f"{e}")
+    try:
         if match := jockey_id.search(text):
             j_id = match.groups()[0]
+    except Exception as e:
+        print(f"{e}")
+    try:
         if match := trainer_id.search(text):
             t_id = match.groups()[0]
-    except:
-        print("horse_id, jockey_id, trainer_id = None, None, None")
+    except Exception as e:
+        print(f"{e}")
 
     text = td.sub("," ,text)
     text = tag.sub("", text)
@@ -230,12 +236,18 @@ def extract_shutuba(text):
     try:
         if match := horse_id.search(text):
             h_id = match.groups()[0]
+    except Exception as e:
+        print(f"{e}")
+    try:
         if match := jockey_id.search(text):
             j_id = match.groups()[0]
+    except Exception as e:
+        print(f"{e}")
+    try:
         if match := trainer_id.search(text):
             t_id = match.groups()[0]
-    except:
-        print("horse_id, jockey_id, trainer_id = None, None, None")
+    except Exception as e:
+        print(f"{e}")
 
     text = td.sub("," ,text)
     text = tag.sub("", text)

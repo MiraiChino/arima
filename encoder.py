@@ -8,7 +8,7 @@ from sklearn.preprocessing import OrdinalEncoder
 class HorseEncoder():
 
     STR_COLUMNS = [
-        "name", "horse_id", "jockey", "jockey_id", "trainer", "trainer_id",
+        "name", "jockey", "trainer",
         "sex", "turn", "weather", "field", "field_condition", "race_condition", "race_name"
     ]
 
@@ -38,6 +38,9 @@ class HorseEncoder():
     def format(self, df):
         result = df.copy()
         result["race_id"] = df["race_id"].astype(int)
+        result["horse_id"] = df["horse_id"].astype(float)
+        result["jockey_id"] = df["jockey_id"].astype(float)
+        result["trainer_id"] = df["trainer_id"].astype(float)
         result["race_date"] = format_date(df["race_date"], df["year"])
         result["corner3"] = format_corner3(df["corner"])
         result["corner4"] = format_corner4(df["corner"])

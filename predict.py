@@ -135,7 +135,8 @@ def result_prob(df, task_logs=[]):
     noneed_columns = [c for c in config.NONEED_COLUMNS if c not in netkeiba.RACE_PAY_COLUMNS]
     df_feat = df_feat.drop(columns=noneed_columns)
     probs = []
-    model_files = [f"{i}_{file}" for file in (config.rank_file, config.reg_file) for i in range(len(config.splits))]
+    model_files = [f"{i}_{file}" for file in (config.rankscore_file, config.rankprize_file, config.reg_file) for i in range(len(config.splits))]
+    # model_files = [f"{i}_{file}" for file in (config.rank_file, config.reg_file) for i in range(len(config.splits))]
     task_logs.append(f"predict")
     for model_file in model_files:
         with open(model_file, "rb") as f:

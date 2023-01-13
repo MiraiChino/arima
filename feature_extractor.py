@@ -1,10 +1,12 @@
 import argparse
+import math
 from pathlib import Path
 
 import dill as pickle
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from trueskill import TrueSkill
 
 import config
 import utils
@@ -45,6 +47,11 @@ def same_ave(*same_columns, target="prize"):
         else:
             return 0
     return wrapper
+
+def interval_prize(history, now, index):
+    interval = (now[index("race_date")] - history[:, index("race_date")]).astype("timedelta64[D]").mean() / np.timedelta64(1, 'D')
+    prize = history[:, index("prize")].mean()
+    return prize / interval
 
 def drize(distance, prize, now_distance):
     return (1 - abs(distance - now_distance) / now_distance) * prize
@@ -161,7 +168,56 @@ def search_history(target_row, hist_pattern, feat_pattern, df):
         targetrow_agg = agg_history_i(len(a)-1, funcs, hist_pattern, a, index)
         row_df_column = pd.DataFrame([targetrow_agg], columns=past_columns)
         hist_df = pd.concat([hist_df, row_df_column], axis="columns")
+        # TODO: ratingも追加
     return hist_df
+
+def rate_all(df, target_columns=["horse_id", "jockey_id", "trainer_id"]):
+    env = TrueSkill(draw_probability=0.000001)
+    ratings = {c: {id: env.create_rating() for id in df[c].fillna(-1).unique()} for c in target_columns }
+    history = {}
+    for race_id, race_df in df.groupby(["race_id"]):
+        print(f"\r{race_id=}", end="")
+        history[race_id] = {
+            "results": [],
+            "weights": [],
+            "ids": {c: [] for c in target_columns},
+            "old_ratings": {c: [] for c in target_columns},
+            "r": {f"{c}_r": [] for c in target_columns},
+        }
+        for i, row in race_df[[*target_columns, "result"]].iterrows():
+            result = row["result"]
+            if math.isnan(result):
+                history[race_id]["results"].append(len(race_df))
+                history[race_id]["weights"].append((0, ))
+            else:
+                history[race_id]["results"].append(int(result))
+                history[race_id]["weights"].append((1, ))
+            for column in target_columns:
+                id = row[column]
+                if math.isnan(id):
+                    id = -1
+                try:
+                    history[race_id]["ids"][column].append(id)
+                    history[race_id]["old_ratings"][column].append((ratings[column][id], ))
+                except Exception as e:
+                    print(e)
+                    import pdb; pdb.set_trace()
+
+        # update ratings
+        for column in target_columns:
+            new_ratings = env.rate(history[race_id]["old_ratings"][column], ranks=history[race_id]["results"], weights=history[race_id]["weights"])
+            for id, (new_rating, ) in zip(history[race_id]["ids"][column], new_ratings):
+                ratings[column][id] = new_rating
+                history[race_id]["r"][f"{column}_r"].append(env.expose(new_rating))
+    df_rating = pd.DataFrame()
+    for r_id, race in history.items():
+        df_r = pd.DataFrame(data=dict(
+            race_id=[r_id]*len(race["results"]),
+            **race["ids"],
+            **race["r"],
+        ))
+    df_rating = pd.concat([df_rating, df_r])
+    return df_rating
 
 def prepare():
     df_races = pd.read_feather(config.netkeiba_race_file)
@@ -181,6 +237,10 @@ def prepare():
     feat_pattern = config.feature_pattern(ave_time)
     df_avetime = pd.Series(ave_time).rename_axis(["field", "distance", "field_condition"]).reset_index(name="ave_time")
     df_avetime.to_feather(config.avetime_file)
+
+    df_ratings = rate_all(df_encoded)
+    df_ratings.to_feather(config.raiting_file)
+    df_encoded = pd.merge(df_encoded, df_ratings, on=['race_id', 'horse_id', 'jockey_id', 'trainer_id'], how='left')
 
     cols = list(feat_pattern.keys())
     for column in cols:
@@ -276,7 +336,7 @@ def update():
                     targetrow_agg = agg_history_i(i, funcs, config.hist_pattern, a, index)
                     row_df_column = pd.DataFrame([targetrow_agg], columns=past_columns)
                     import pdb; pdb.set_trace()
-                    
+
                     # hist_df = pd.concat([hist_df, row_df_column], axis="columns")
                     # df_agg = search_history(row, config.hist_pattern, feat_pattern, df_hist)
                     # new_feat = pd.concat([df_feat, df_agg]).reset_index(drop=True)

@@ -29,6 +29,11 @@ class HorseEncoder():
         result["hukushou"] = calc_hukushou(df)
         result["prize"] = calc_prize(df)
         result["score"] = calc_score(df)
+        result["last3frel"] = relative_min(df["last3f"])
+        result["penaltyrel"] = relative_min(df["penalty"])
+        result["weightrel"] = relative_min(df["weight"])
+        result["penaltywgt"] = df["penalty"] / df["weight"]
+        result["oddsrslt"] = df["odds"] / df["result"]
         result[HorseEncoder.STR_COLUMNS] = self.encoder.transform(df[HorseEncoder.STR_COLUMNS])
         return result
 
@@ -81,7 +86,7 @@ def get_tanshou(x):
         return None
     elif no == 1:
         if x["horse_no"] == x["tanno1"]:
-            return x[f"tan1"]
+            return 100/x[f"tan1"]
         elif x["horse_no"] == x["tanno2"]:
             return 100/x[f"tan2"]
     else:
@@ -137,7 +142,8 @@ def format_corner4(s_corner):
         return None
 
 def format_racecondition(df):
-    mask_bad_rc = df.eval("race_condition in ['未勝利', '新馬', '５００万下', '１０００万下', '15頭', '16頭', '12頭', '10頭', '14頭', '13頭']")
+    mask_bad_rc = df.eval("race_condition in ['15頭', '16頭', '12頭', '10頭', '14頭', '13頭']")
+    # mask_bad_rc = df.eval("race_condition in ['未勝利', '新馬', '５００万下', '１０００万下', '15頭', '16頭', '12頭', '10頭', '14頭', '13頭']")
     result = df["race_condition"].mask(mask_bad_rc, df["race_name"])
     return result
 
@@ -174,6 +180,9 @@ def encoded_margin(df):
 
 def encoded_time(s_time):
     return s_time.apply(to_seconds)
+
+def relative_min(series):
+    return series - series.min()
 
 if __name__ == "__main__":
     import netkeiba

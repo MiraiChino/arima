@@ -1,12 +1,13 @@
 # scraping
 from_date = "2008-01"
 to_date = "2022-12"
-netkeiba_horse_file = f"netkeiba{from_date}_{to_date}.horses.feather"
-netkeiba_race_file = f"netkeiba{from_date}_{to_date}.races.feather"
+netkeiba_horse_file = f"temp/netkeiba{from_date}_{to_date}.horses.feather"
+netkeiba_race_file = f"temp/netkeiba{from_date}_{to_date}.races.feather"
 
 # feature extraction
 encoder_file = f"encoder{from_date}_{to_date}.pickle"
 avetime_file = f"avetime{from_date}_{to_date}.feather"
+raiting_file = f"temp/rating{from_date}_{to_date}.feather"
 feat_file = f"feature{from_date}_{to_date}.feather"
 
 NONEED_COLUMNS = [
@@ -23,8 +24,9 @@ RACEDATE_COLUMNS = ["year", "place_code", "hold_num", "day_num", "race_num"]
 hist_pattern = [1, 2, 3, 5, 999999]
 
 def feature_pattern(ave_time):
-    from feature_extractor import (ave, distance_prize, interval, same_ave,
-                                   same_count, same_drize, time)
+    from feature_extractor import (ave, distance_prize, interval,
+                                   interval_prize, same_ave, same_count,
+                                   same_drize, time)
     return {
         "horse_id": {
             "horse_interval": interval,
@@ -40,10 +42,17 @@ def feature_pattern(ave_time):
             "horse_last3f": ave("last3f"),
             "horse_weight": ave("weight"),
             "horse_wc": ave("weight_change"),
+            "horse_last3frel": ave("last3frel"),
+            "horse_penaltyrel": ave("penaltyrel"),
+            "horse_weightrel": ave("weightrel"),
+            "horse_penaltywgt": ave("penaltywgt"),
+            "horse_oddsrslt": ave("oddsrslt"),
+            "horse_r": ave("horse_id_r"),
             "horse_tan": ave("tanshou"),
             "horse_huku": ave("hukushou"),
             "horse_score": ave("score"),
             "horse_prize": ave("prize"),
+            "horse_iprize": interval_prize,
             "horse_pprize": same_ave("place_code", target="prize"),
             "horse_dprize": same_ave("distance", target="prize"),
             "horse_fprize": same_ave("field", target="prize"),
@@ -85,10 +94,16 @@ def feature_pattern(ave_time):
             "jockey_corner3": ave("corner3"),
             "jockey_corner4": ave("corner4"),
             "jockey_last3f": ave("last3f"),
+            "jockey_last3frel": ave("last3frel"),
+            "jockey_penaltyrel": ave("penaltyrel"),
+            "jockey_penaltywgt": ave("penaltywgt"),
+            "jockey_oddsrslt": ave("oddsrslt"),
+            "jockey_r": ave("jockey_id_r"),
             "jockey_tan": ave("tanshou"),
             "jockey_huku": ave("hukushou"),
             "jockey_score": ave("score"),
             "jockey_prize": ave("prize"),
+            "jockey_iprize": interval_prize,
             "jockey_pprize": same_ave("place_code", target="prize"),
             "jockey_dprize": same_ave("distance", target="prize"),
             "jockey_fprize": same_ave("field", target="prize"),
@@ -116,10 +131,17 @@ def feature_pattern(ave_time):
             "trainer_corner3": ave("corner3"),
             "trainer_corner4": ave("corner4"),
             "trainer_last3f": ave("last3f"),
+            "trainer_last3frel": ave("last3frel"),
+            "trainer_penaltyrel": ave("penaltyrel"),
+            "trainer_weightrel": ave("weightrel"),
+            "trainer_penaltywgt": ave("penaltywgt"),
+            "trainer_oddsrslt": ave("oddsrslt"),
+            "trainer_r": ave("trainer_id_r"),
             "trainer_tan": ave("tanshou"),
             "trainer_huku": ave("hukushou"),
             "trainer_score": ave("score"),
             "trainer_prize": ave("prize"),
+            "trainer_iprize": interval_prize,
             "trainer_pprize": same_ave("place_code", target="prize"),
             "trainer_dprize": same_ave("distance", target="prize"),
             "trainer_fprize": same_ave("field", target="prize"),
@@ -155,9 +177,20 @@ splits = [
     ),
 ]
 
-rank_file = f"rank_model{from_date}_{to_date}.pickle"
-rank_target = "score"
-rank_params = {
+rankscore_file = f"rankscore_model{from_date}_{to_date}.pickle"
+rankscore_target = "score"
+rankscore_params = {
+    "objective": "lambdarank",
+    "metric": "ndcg",
+    "lambdarank_truncation_level": 10,
+    "ndcg_eval_at": [1, 3, 5],
+    "boosting_type": "gbdt",
+    "learning_rate": 0.01,
+}
+
+rankprize_file = f"rankprize_model{from_date}_{to_date}.pickle"
+rankprize_target = "prizeper"
+rankprize_params = {
     "objective": "lambdarank",
     "metric": "ndcg",
     "lambdarank_truncation_level": 10,

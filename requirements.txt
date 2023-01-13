@@ -106,6 +106,7 @@ tqdm==4.64.1
 traitlets==5.1.1
 trio==0.19.0
 trio-websocket==0.9.2
+trueskill==0.4.5
 typing_extensions==4.0.1
 urllib3==1.26.7
 uvicorn==0.17.0

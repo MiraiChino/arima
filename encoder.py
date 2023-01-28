@@ -1,7 +1,7 @@
 import math
+from datetime import datetime
 
-import numpy as np
-import pandas as pd
+import polars as pl
 from sklearn.preprocessing import OrdinalEncoder
 
 
@@ -11,46 +11,93 @@ class HorseEncoder():
         "name", "jockey", "trainer",
         "sex", "turn", "weather", "field", "field_condition", "race_condition", "race_name"
     ]
+    start_of_day = datetime.strptime("0001-01-01", "%Y-%m-%d")
 
     def __init__(self):
         self.encoder = OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)
 
+    def format(self, df):
+        return df.filter(
+            ~pl.col("race_condition").is_in(['15頭', '16頭', '12頭', '10頭', '14頭', '13頭'])
+        )
+
     def fit(self, df):
-        self.encoder.fit(df[HorseEncoder.STR_COLUMNS])
+        self.encoder.fit(df.select(HorseEncoder.STR_COLUMNS).to_numpy())
         return self
 
     def transform(self, df):
-        result = df.copy()
-        result["cos_racedate"] = encode_racedate(result["race_date"])
-        result["cos_starttime"] = encode_starttime(df["start_time"])
-        result["margin"] = encoded_margin(df)
-        result["time"] = encoded_time(df["time"])
-        result["tanshou"] = calc_tanshou(df)
-        result["hukushou"] = calc_hukushou(df)
-        result["prize"] = calc_prize(df)
-        result["score"] = calc_score(df)
-        result["last3frel"] = relative_min(df["last3f"])
-        result["penaltyrel"] = relative_min(df["penalty"])
-        result["weightrel"] = relative_min(df["weight"])
-        result["penaltywgt"] = df["penalty"] / df["weight"]
-        result["oddsrslt"] = df["odds"] / df["result"]
-        result[HorseEncoder.STR_COLUMNS] = self.encoder.transform(df[HorseEncoder.STR_COLUMNS])
-        return result
+        np_encoded_T = self.encoder.transform(df.select(HorseEncoder.STR_COLUMNS).to_numpy()).T
+        return (
+            df.lazy()
+            .with_columns([
+                pl.col("race_id").cast(pl.Float64),
+                pl.col("horse_id").cast(pl.Float64),
+                pl.col("jockey_id").cast(pl.Float64),
+                pl.col("trainer_id").cast(pl.Float64),
+                encode_racedate().alias("race_date"),
+                encode_starttime().alias("start_time"),
+                pl.col("time").apply(to_seconds).alias("time"),
+                pl.col("corner").str.extract_all(r'\d+').alias("corners"),
+                encode_tanshou().alias("tanshou"),
+                encode_hukushou().alias("hukushou"),
+                encode_prize().alias("prize"),
+                encode_score().alias("score"),
+                (pl.col("last3f") - pl.col("last3f").min().over("race_id")).alias("last3frel"),
+                (pl.col("penalty") - pl.col("penalty").min().over("race_id")).alias("penaltyrel"),
+                (pl.col("weight") - pl.col("weight").min().over("race_id")).alias("weightrel"),
+                (pl.col("penalty") / pl.col("weight")).alias("penaltywgt"),
+                (pl.col("odds") / pl.col("result")).alias("oddsrslt"),
+                *[pl.Series(col, values) for col, values in zip(HorseEncoder.STR_COLUMNS, np_encoded_T)],
+            ])
+            .with_columns([
+                pl.col("race_date").dt.ordinal_day().apply(to_cos(365)).alias("cos_racedate"),
+                (pl.col("start_time") - HorseEncoder.start_of_day).dt.seconds().apply(to_cos(86400)).alias("cos_starttime"),
+                (pl.col("time") - pl.col("time").min().over("race_id")).alias("margin"),
+                pl.col("corners").arr.get(-4).alias("corner1"),
+                pl.col("corners").arr.get(-3).alias("corner2"),
+                pl.col("corners").arr.get(-2).alias("corner3"),
+                pl.col("corners").arr.get(-1).alias("corner4"),
+            ])
+            .select(pl.exclude("corners"))
+            .collect()
+        )
 
     def fit_transform(self, df):
         return self.fit(df).transform(df)
 
-    def format(self, df):
-        result = df.copy()
-        result["race_id"] = df["race_id"].astype(int)
-        result["horse_id"] = df["horse_id"].astype(float)
-        result["jockey_id"] = df["jockey_id"].astype(float)
-        result["trainer_id"] = df["trainer_id"].astype(float)
-        result["race_date"] = format_date(df["race_date"], df["year"])
-        result["corner3"] = format_corner3(df["corner"])
-        result["corner4"] = format_corner4(df["corner"])
-        result["race_condition"] = format_racecondition(df)
-        return result
+    def format_fit_transform(self, df):
+        df_formatted = self.format(df)
+        return self.fit_transform(df_formatted)
+
+def to_cos(max):
+    def wrapper(x):
+        return math.cos(math.radians(90 - (x / max)*360))
+    return wrapper
+
+def encode_racedate():
+    mm_dd = (
+        pl.col("race_date")
+        .str.extract_all(r'\d+')
+        .arr.eval(
+            pl.element().str.zfill(2)
+        )
+        .arr.join("-")
+    )
+    return (
+        pl.concat_str([pl.col("year"), mm_dd], sep="-")
+        .str.strptime(pl.Date, "%Y-%m-%d")
+    )
+
+def encode_starttime():
+    return (
+        pl.col("start_time")
+        .str.extract_all(r'\d+')
+        .arr.eval(
+            pl.element().str.zfill(2)
+        )
+        .arr.join(":")
+        .str.strptime(pl.Datetime, "%H:%M")
+    )
 
 def to_seconds(x):
     if not x:
@@ -59,180 +106,107 @@ def to_seconds(x):
     sec, ms100 = secdot.split('.')
     return int(min)*60 + int(sec) + int(ms100)*0.1
 
-def to_cos(x, max):
-    return np.cos(math.radians(90 - (x / max)*360))
+def encode_tanshou():
+    return (
+        pl.when(pl.col("result") != 1).then(0.0)
+        .when(pl.col("horse_no") == pl.col("tanno1")).then(100.0/pl.col("tan1"))
+        .when(pl.col("horse_no") == pl.col("tanno2")).then(100.0/pl.col("tan2"))
+    )
 
-def to_score(x):
-    no = x["result"]
-    if not no:
-        return None
-    elif 1 <= no <= 5:
-        return [20, 8, 5, 3, 2][int(no)-1]
-    else:
-        return 0
+def encode_hukushou():
+    return (
+        pl.when(3 < pl.col("result")).then(0)
+        .when(pl.col("horse_no") == pl.col("hukuno1")).then(100.0/pl.col("hukuno1"))
+        .when(pl.col("horse_no") == pl.col("hukuno2")).then(100.0/pl.col("hukuno2"))
+        .when(pl.col("horse_no") == pl.col("hukuno3")).then(100.0/pl.col("hukuno3"))
+    )
 
-def get_prize(x):
-    no = x["result"]
-    if not no:
-        return None
-    elif 1 <= no <= 5:
-        return x[f"prize{int(no)}"]
-    else:
-        return 0
+def encode_prize():
+    return (
+        pl.when(5 < pl.col("result")).then(0)
+        .when(pl.col("result") == 1).then(pl.col("prize1"))
+        .when(pl.col("result") == 2).then(pl.col("prize2"))
+        .when(pl.col("result") == 3).then(pl.col("prize3"))
+        .when(pl.col("result") == 4).then(pl.col("prize4"))
+        .when(pl.col("result") == 5).then(pl.col("prize5"))
+    )
 
-def get_tanshou(x):
-    no = x["result"]
-    if not no:
-        return None
-    elif no == 1:
-        if x["horse_no"] == x["tanno1"]:
-            return 100/x[f"tan1"]
-        elif x["horse_no"] == x["tanno2"]:
-            return 100/x[f"tan2"]
-    else:
-        return 0
+def encode_score():
+    return (
+        pl.when(5 < pl.col("result")).then(0)
+        .when(pl.col("result") == 1).then(20)
+        .when(pl.col("result") == 2).then(8)
+        .when(pl.col("result") == 3).then(5)
+        .when(pl.col("result") == 4).then(3)
+        .when(pl.col("result") == 5).then(2)
+    )
 
-def get_hukushou(x):
-    no = x["result"]
-    if not no:
-        return None
-    elif 1 <= no <= 3:
-        if x["horse_no"] == x["hukuno1"]:
-            return 100/x[f"huku1"]
-        elif x["horse_no"] == x["hukuno2"]:
-            return 100/x[f"huku2"]
-        elif x["horse_no"] == x["hukuno3"]:
-            return 100/x[f"huku3"]
-    else:
-        return 0
+# if __name__ == "__main__":
+#     import netkeiba
+#     horse_encoder = HorseEncoder()
+#     race_data, horses = netkeiba.scrape_shutuba("200806010101")
+#     df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
+#     df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_PRE_COLUMNS)
+#     df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
+#     df_format = horse_encoder.format(df_original)
+#     df_encoded = horse_encoder.fit_transform(df_format)
+#     print(df_encoded)
 
-def format_jockey(s_jockey):
-    return s_jockey.str.replace('^[△▲☆★◇](.*)', r'\1', regex=True)
+#     race_data, horses = netkeiba.scrape_results("200806010108") # ３連単なし
+#     df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
+#     df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_AFTER_COLUMNS)
+#     df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
+#     df_format = horse_encoder.format(df_original)
+#     df_encoded = horse_encoder.transform(df_format)
+#     print(df_encoded)
 
-def format_date(s_racedate, s_year):
-    s_mmdd = s_racedate.replace('(\d+)月(\d+)日\(.\)', r'\1/\2', regex=True)
-    s_yyyy = s_year.astype(str)
-    result = pd.to_datetime(s_yyyy + s_mmdd, format='%Y%m/%d')
-    return result
+#     race_data, horses = netkeiba.scrape_results("200808010709") # 単勝２頭（同着）
+#     df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
+#     df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_AFTER_COLUMNS)
+#     df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
+#     df_format = horse_encoder.format(df_original)
+#     df_encoded = horse_encoder.transform(df_format)
+#     print(df_encoded)
 
-def format_corner(s_corner):
-    s_corner = s_corner.replace('^(\d+)-(\d+)-(\d+)-(\d+)$', r'\3-\4', regex=True)
-    s_corner = s_corner.replace('^(\d+)-(\d+)-(\d+)$', r'\2-\3', regex=True)
-    df_corner34 = s_corner.str.split('-', expand=True)
-    return df_corner34
+#     race_data, horses = netkeiba.scrape_results("201302010505") # 枠連なし、複勝なぜか２頭
+#     df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
+#     df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_AFTER_COLUMNS)
+#     df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
+#     df_format = horse_encoder.format(df_original)
+#     df_encoded = horse_encoder.transform(df_format)
+#     print(df_encoded)
 
-def format_corner3(s_corner):
-    df_corner34 = format_corner(s_corner)
-    if len(df_corner34.columns) == 2:
-        corner3 = df_corner34[0]
-        corner3 = corner3.mask(corner3 == '', np.nan)
-        corner3 = corner3.mask(corner3 == None, np.nan)
-        return corner3.astype(float)
-    else:
-        return None
-
-def format_corner4(s_corner):
-    df_corner34 = format_corner(s_corner)
-    if len(df_corner34.columns) == 2:
-        corner4 = df_corner34[1]
-        corner4 = corner4.mask(corner4 == '', np.nan)
-        corner4 = corner4.mask(corner4 == None, np.nan)
-        return corner4.astype(float)
-    else:
-        return None
-
-def format_racecondition(df):
-    mask_bad_rc = df.eval("race_condition in ['15頭', '16頭', '12頭', '10頭', '14頭', '13頭']")
-    # mask_bad_rc = df.eval("race_condition in ['未勝利', '新馬', '５００万下', '１０００万下', '15頭', '16頭', '12頭', '10頭', '14頭', '13頭']")
-    result = df["race_condition"].mask(mask_bad_rc, df["race_name"])
-    return result
-
-def encode_racedate(s_racedate):
-    return s_racedate.dt.dayofyear.apply(to_cos, max=365)
-
-def encode_starttime(s_starttime):
-    result = pd.to_timedelta(s_starttime + ":00").dt.total_seconds()
-    result = result.apply(to_cos, max=86400)
-    return result
-
-def calc_prize(df):
-    return df.apply(get_prize, axis="columns")
-
-def calc_score(df):
-    return df.apply(to_score, axis="columns")
-
-def calc_hukushou(df):
-    return df.apply(get_hukushou, axis="columns")
-
-def calc_tanshou(df):
-    return df.apply(get_tanshou, axis="columns")
-
-def yield_df_race(df):
-    return df.groupby(["year", "place_code", "hold_num", "day_num", "race_num"])
-
-def encoded_margin(df):
-    s_margin_list = []
-    for raceid, df_race in yield_df_race(df):
-        s_timesec = df_race["time"].apply(to_seconds)
-        time_1st = s_timesec.iloc[0]
-        s_margin_list.append(s_timesec - time_1st)
-    return pd.concat(s_margin_list)
-
-def encoded_time(s_time):
-    return s_time.apply(to_seconds)
-
-def relative_min(series):
-    return series - series.min()
-
-if __name__ == "__main__":
-    import netkeiba
-    horse_encoder = HorseEncoder()
-    race_data, horses = netkeiba.scrape_shutuba("200806010101")
-    df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
-    df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_PRE_COLUMNS)
-    df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
-    df_format = horse_encoder.format(df_original)
-    df_encoded = horse_encoder.fit_transform(df_format)
-    print(df_encoded)
-
-    race_data, horses = netkeiba.scrape_results("200806010108") # ３連単なし
-    df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
-    df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_AFTER_COLUMNS)
-    df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
-    df_format = horse_encoder.format(df_original)
-    df_encoded = horse_encoder.transform(df_format)
-    print(df_encoded)
-
-    race_data, horses = netkeiba.scrape_results("200808010709") # 単勝２頭（同着）
-    df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
-    df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_AFTER_COLUMNS)
-    df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
-    df_format = horse_encoder.format(df_original)
-    df_encoded = horse_encoder.transform(df_format)
-    print(df_encoded)
-
-    race_data, horses = netkeiba.scrape_results("201302010505") # 枠連なし、複勝なぜか２頭
-    df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
-    df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_AFTER_COLUMNS)
-    df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
-    df_format = horse_encoder.format(df_original)
-    df_encoded = horse_encoder.transform(df_format)
-    print(df_encoded)
-
-    #     result  gate  horse_no  name  horse_id  sex  age  ...  corner4  cos_racedate  cos_starttime  tanshou  hukushou  prize  score
-    # 0      1.0     6        11   0.0      12.0  2.0    3  ...     12.0      0.085965       -0.55557     2340       570   1000     20
-    # 1      2.0     2         4   7.0       8.0  2.0    3  ...      1.0      0.085965       -0.55557        0       200    400      8
-    # 2      3.0     1         2   9.0      14.0  2.0    3  ...     10.0      0.085965       -0.55557        0      1430    250      5
-    # 3      4.0     3         5   4.0      13.0  2.0    3  ...      3.0      0.085965       -0.55557        0         0    150      3
-    # 4      5.0     2         3  11.0       7.0  2.0    3  ...      3.0      0.085965       -0.55557        0         0    100      2
-    # 5      6.0     7        14   3.0       5.0  2.0    3  ...     10.0      0.085965       -0.55557        0         0      0      0
-    # 6      7.0     8        15  15.0      10.0  0.0    3  ...     12.0      0.085965       -0.55557        0         0      0      0
-    # 7      8.0     6        12   8.0       4.0  2.0    3  ...      6.0      0.085965       -0.55557        0         0      0      0
-    # 8      9.0     8        16   1.0       6.0  2.0    3  ...      3.0      0.085965       -0.55557        0         0      0      0
-    # 9     10.0     4         8  14.0      11.0  2.0    3  ...      6.0      0.085965       -0.55557        0         0      0      0
-    # 10    11.0     5         9  10.0      15.0  2.0    3  ...      2.0      0.085965       -0.55557        0         0      0      0
-    # 11    12.0     3         6  13.0       1.0  2.0    3  ...      6.0      0.085965       -0.55557        0         0      0      0
-    # 12    13.0     4         7  12.0       9.0  2.0    3  ...      6.0      0.085965       -0.55557        0         0      0      0
-    # 13    14.0     7        13   5.0       2.0  2.0    3  ...     14.0      0.085965       -0.55557        0         0      0      0
-    # 14    15.0     5        10   2.0       3.0  1.0    3  ...     15.0      0.085965       -0.55557        0         0      0      0
-    # 15     NaN     1         1   6.0       0.0  1.0    3  ...      NaN      0.085965       -0.55557        0         0      0      0
+# (Pdb) df
+# shape: (738149, 59)
+# ┌────────┬──────┬──────────┬────────────────────┬─────┬──────┬───────┬─────────┬──────┐
+# │ result ┆ gate ┆ horse_no ┆ name               ┆ ... ┆ uma2 ┆ puku  ┆ san1    ┆ san2 │
+# │ ---    ┆ ---  ┆ ---      ┆ ---                ┆     ┆ ---  ┆ ---   ┆ ---     ┆ ---  │
+# │ f32    ┆ i8   ┆ i8       ┆ str                ┆     ┆ f64  ┆ i32   ┆ f32     ┆ f64  │
+# ╞════════╪══════╪══════════╪════════════════════╪═════╪══════╪═══════╪═════════╪══════╡
+# │ 1.0    ┆ 1    ┆ 2        ┆ メジロアリエル     ┆ ... ┆ null ┆ 10600 ┆ null    ┆ null │
+# │ 2.0    ┆ 3    ┆ 5        ┆ ヒロアンジェロ     ┆ ... ┆ null ┆ 10600 ┆ null    ┆ null │
+# │ 3.0    ┆ 2    ┆ 3        ┆ キャスタスペルミー ┆ ... ┆ null ┆ 10600 ┆ null    ┆ null │
+# │ 4.0    ┆ 4    ┆ 7        ┆ デルマベガ         ┆ ... ┆ null ┆ 10600 ┆ null    ┆ null │
+# │ ...    ┆ ...  ┆ ...      ┆ ...                ┆ ... ┆ ...  ┆ ...   ┆ ...     ┆ ...  │
+# │ 13.0   ┆ 3    ┆ 6        ┆ テイエムイダテン   ┆ ... ┆ null ┆ 2580  ┆ 10260.0 ┆ null │
+# │ 14.0   ┆ 4    ┆ 8        ┆ ショウナンアリアナ ┆ ... ┆ null ┆ 2580  ┆ 10260.0 ┆ null │
+# │ 15.0   ┆ 5    ┆ 9        ┆ アールラプチャー   ┆ ... ┆ null ┆ 2580  ┆ 10260.0 ┆ null │
+# │ 16.0   ┆ 7    ┆ 13       ┆ グレイトゲイナー   ┆ ... ┆ null ┆ 2580  ┆ 10260.0 ┆ null │
+# └────────┴──────┴──────────┴────────────────────┴─────┴──────┴───────┴─────────┴──────┘
+# (Pdb) df_encoded
+# shape: (737916, 72)
+# ┌────────┬──────┬──────────┬─────────┬─────┬─────────┬─────────┬─────────┬─────────┐
+# │ result ┆ gate ┆ horse_no ┆ name    ┆ ... ┆ corner1 ┆ corner2 ┆ corner3 ┆ corner4 │
+# │ ---    ┆ ---  ┆ ---      ┆ ---     ┆     ┆ ---     ┆ ---     ┆ ---     ┆ ---     │
+# │ f32    ┆ i8   ┆ i8       ┆ f64     ┆     ┆ str     ┆ str     ┆ str     ┆ str     │
+# ╞════════╪══════╪══════════╪═════════╪═════╪═════════╪═════════╪═════════╪═════════╡
+# │ 1.0    ┆ 1    ┆ 2        ┆ 65515.0 ┆ ... ┆ null    ┆ null    ┆ 1       ┆ 1       │
+# │ 2.0    ┆ 3    ┆ 5        ┆ 50525.0 ┆ ... ┆ null    ┆ null    ┆ 10      ┆ 7       │
+# │ 3.0    ┆ 2    ┆ 3        ┆ 14124.0 ┆ ... ┆ null    ┆ null    ┆ 13      ┆ 8       │
+# │ 4.0    ┆ 4    ┆ 7        ┆ 40762.0 ┆ ... ┆ null    ┆ null    ┆ 2       ┆ 2       │
+# │ ...    ┆ ...  ┆ ...      ┆ ...     ┆ ... ┆ ...     ┆ ...     ┆ ...     ┆ ...     │
+# │ 13.0   ┆ 3    ┆ 6        ┆ 38454.0 ┆ ... ┆ null    ┆ null    ┆ 6       ┆ 7       │
+# │ 14.0   ┆ 4    ┆ 8        ┆ 26765.0 ┆ ... ┆ null    ┆ null    ┆ 9       ┆ 9       │
+# │ 15.0   ┆ 5    ┆ 9        ┆ 4554.0  ┆ ... ┆ null    ┆ null    ┆ 4       ┆ 4       │
+# │ 16.0   ┆ 7    ┆ 13       ┆ 18195.0 ┆ ... ┆ null    ┆ null    ┆ 9       ┆ 11      │
+# └────────┴──────┴──────────┴─────────┴─────┴─────────┴─────────┴─────────┴─────────┘

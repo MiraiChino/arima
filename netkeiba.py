@@ -5,6 +5,7 @@ from functools import wraps
 from pathlib import Path
 
 import pandas as pd
+import polars as pl
 import requests
 from bs4 import BeautifulSoup
 from tqdm import tqdm
@@ -291,11 +292,13 @@ if __name__ == "__main__":
 
             try:
                 race_df = pd.DataFrame(races, columns=RACE_AFTER_COLUMNS)
-                race_df.to_feather(race_file)
+                race_df = pl.from_pandas(race_df)
+                race_df.write_ipc(race_file)
                 print(f"saved: {year}-{month} races -> {race_file}")
 
                 horse_df = pd.DataFrame(horses, columns=HORSE_COLUMNS)
-                horse_df.to_feather(horse_file)
+                horse_df = pl.from_pandas(horse_df)
+                horse_df.write_ipc(horse_file)
                 print(f"saved: {year}-{month} horses -> {horse_file}")
 
                 with open(netkeiba_log, 'a') as f:
@@ -307,11 +310,21 @@ if __name__ == "__main__":
 
     race_chunks, horse_chunks = [], []
     for year, month in tqdm(list(utils.daterange(config.from_date, config.to_date))):
-        race_chunks.append(pd.read_feather(f"netkeiba/netkeiba{year}-{month}.races.feather"))
-        horse_chunks.append(pd.read_feather(f"netkeiba/netkeiba{year}-{month}.horses.feather"))
-    df = pd.concat(race_chunks, ignore_index=True)
-    df = utils.reduce_mem_usage(df)
-    df.to_feather(config.netkeiba_race_file)
-    df = pd.concat(horse_chunks, ignore_index=True)
-    df = utils.reduce_mem_usage(df)
-    df.to_feather(config.netkeiba_horse_file)
+        race = (
+            pl.read_ipc(f"netkeiba/netkeiba{year}-{month}.races.feather")
+            .lazy()
+            .with_columns([
+                pl.col(c).cast(pl.Float64) for c in RACE_PAY_COLUMNS
+            ])
+        )
+        horse = (
+            pl.read_ipc(f"netkeiba/netkeiba{year}-{month}.horses.feather")
+            .lazy()
+        )
+        race_chunks.append(race)
+        horse_chunks.append(horse)
+    ldf_races = pl.concat(race_chunks)
+    ldf_horses = pl.concat(horse_chunks)
+    df = ldf_horses.join(ldf_races, on='race_id', how='left').collect()
+    df.write_ipc(config.netkeiba_file)
+

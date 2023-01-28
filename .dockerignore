@@ -19,6 +19,7 @@ docker-compose.deploy.yml
 netkeiba
 feat
 temp
+catboost_info
 train.log
 netkeiba.log
 update.sh

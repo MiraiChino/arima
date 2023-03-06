@@ -1,15 +1,18 @@
 import argparse
+import functools
 import traceback
 from datetime import timedelta
 from pathlib import Path
 
 import dill as pickle
+import numpy as np
+import pandas as pd
 import polars as pl
 from tqdm import tqdm
 from trueskill import TrueSkill
 
 import config
-import utils
+import featlist
 from encoder import HorseEncoder
 
 
@@ -19,44 +22,6 @@ def parse_args():
     parser.add_argument('--prepare', action='store_true')
     parser.add_argument('--out', action='store_true')
     return parser.parse_args()
-
-# def ave(column):
-#     def wrapper(df_past=None, now=None, i=None):
-#         return pl.col(column).mean()
-#     return wrapper
-
-# def same_count(column):
-#     def wrapper(df_past=None, now=None, i=None):
-#         return (pl.col(column) == now[column]).sum()
-#     return wrapper
-
-# def diff(col1, col2):
-#     def wrapper(df_past=None, now=None, i=None):
-#         return ((pl.col(col1) - pl.col(col2)) / pl.col(col2)).mean()
-#     return wrapper
-
-# def div(col1, col2):
-#     def wrapper(df_past=None, now=None, i=None):
-#         return (pl.col(col1) / pl.col(col2)).mean()
-#     return wrapper
-
-# def same_ave(*columns, target='prize'):
-#     def wrapper(df_past=None, now=None, i=None):
-#         df_temp = df_past.select(pl.col(target).mean().over(columns).suffix('_ave'))
-#         return df_temp.get_column(f'{target}_ave').take(i)
-#     return wrapper
-
-
-# def drize(df_past=None, now=None, i=None):
-#     now = df[i, 'distance']
-#     return diff_multi('distance', 'prize', now).mean()
-
-# def same_drize(*columns):
-#     def wrapper(df_past=None, now=None, i=None):
-#         now = df[i, 'distance']
-#         df_temp = df.select(diff_multi('distance', 'prize', now).mean().over(columns).alias('drize_ave'))
-#         return df_temp.get_column('drize_ave').take(i)
-#     return wrapper
 
 def search_history(target_row, hist_pattern, feat_pattern, df):
     row_df = pd.DataFrame([target_row]).reset_index()
@@ -134,91 +99,87 @@ def rate_all(df):
         update_ratings('trainer', t_ids, results, weights)
     return pl.DataFrame(data)
 
-def ave(column):
-    def wrapper(df=None, i=None):
-        return pl.col(column).mean()
-    return wrapper
 
-def same_count(column):
-    def wrapper(df=None, i=None):
-        return (pl.col(column) == df[i, column]).sum()
-    return wrapper
+def calc(f, past_j, row, index, nan):
+    if past_j.any():
+        return f(past_j, row, index)
+    else:
+        return nan
 
-def diff(col1, col2):
-    def wrapper(df=None, i=None):
-        return ((pl.col(col1) - pl.col(col2)) / pl.col(col2)).mean()
-    return wrapper
-
-def div(col1, col2):
-    def wrapper(df=None, i=None):
-        return (pl.col(col1) / pl.col(col2)).mean()
-    return wrapper
-    
-def same_ave(*columns, target='prize'):
-    def wrapper(df=None, i=None):
-        same_condition = pl.fold(
-            acc=pl.lit(True),
-            f=lambda a, b: a & b,
-            exprs=[(pl.col(c) == df[i, c]) for c in columns]
-        )
-        return (same_condition * pl.col(target)).mean()
-    return wrapper
-
-def diff_multi(column, target, now):
-    return (1 - abs(pl.col(column) - now) / now) * pl.col(target)
-
-def drize(target='prize'):
-    def wrapper(df=None, i=None):
-        return diff_multi('distance', target, df[i, 'distance']).mean()
-    return wrapper
-
-def same_drize(*columns, target='prize'):
-    def wrapper(df=None, i=None):
-        same_condition = pl.fold(
-            acc=pl.lit(True),
-            f=lambda a, b: a & b,
-            exprs=[(pl.col(c) == df[i, c]) for c in columns]
-        )
-        return (same_condition * diff_multi('distance', target, df[i, 'distance'])).mean()
-    return wrapper
-
-def featcols_past_nmonth(df, past_n, f_pattern, mo=timedelta(days=30)):
-    feats = []
-    for i in range(df.height):
+def agg_history_i(i, f_byrace, f_bymonth, hist_pattern, history, index, mo=timedelta(days=30)):
+    no_hist = np.empty(((len(f_byrace) + len(f_bymonth)) * len(hist_pattern),))
+    no_hist[:] = np.nan
+    row = history[i, :]
+    hist_race = history[:, index('race_date')]
+    now_race = row[index('race_date')]
+    past_days = now_race - hist_race
+    past_hist = history[np.where(hist_race < now_race)][::-1]
+    zero_m = timedelta(days=0)
+    if past_hist.any():
         try:
-            feat = (
-                df.lazy()
-                .with_column((pl.col('past_race') - pl.col('race_date')).alias('past'))
-                .head(i)    # 過去レースをスライス
-                .filter(pl.col('past') <= past_n * mo)
-                .select([
-                    expr(df, i).alias(f'{col}_{past_n}mo')
-                    for col, expr in f_pattern.items()
-                    # ave('result').alias(f'horse_result_{past_n}mo'),
-                    # same_count(df, i, 'weather').alias(f'horse_weather_{past_n}mo'),
-                    # diff('time', 'avetime').alias(f'horse_time_{past_n}mo'),
-                    # div('prize', 'interval').alias(f'horse_iprize_{past_n}mo'),
-                    # same_ave(df, i, 'place_code', target='prize').alias(f'horse_pprize_{past_n}mo'),
-                    # drize(df, i, target='prize').alias(f'horse_drize_{past_n}mo'),
-                    # same_drize(df, i, 'place_code', target='prize').alias(f'horse_pdrize_{past_n}mo'),
-                ])
-            )
-        except:
-            import traceback
+            last_jrace_fresult = [
+                f(past_hist[:1+j, :], row, index)
+                for f in f_byrace
+                for j in hist_pattern
+            ]
+            last_jmonth_fresult = [
+                calc(
+                    f,
+                    past_hist[np.where((zero_m < past_days) & (past_days <= j*mo))],
+                    row,
+                    index,
+                    np.nan,
+                )
+                for f in f_bymonth
+                for j in hist_pattern
+            ]
+            return np.array(last_jrace_fresult + last_jmonth_fresult)
+        except Exception as e:
             print(traceback.format_exc())
             import pdb; pdb.set_trace()
-        feats.append(feat)
-    return pl.concat(feats).collect()
+            return no_hist
+    else:
+        return no_hist
 
-def featcols_past_nrace(df, past_n, f_pattern):
-    return (
-        df.reverse()
-        .with_column(pl.col('race_date').cumcount().cast(pl.Int64).alias('idx'))
-        .groupby_dynamic('idx', every='1i', period=f'{past_n}i')
-        .agg([expr().alias(f'{col_name}_{past_n}') for col_name, expr in f_pattern.items()])
-        .reverse()
-        .select([f'{col_name}_{past_n}' for col_name in f_pattern.keys()])
+def agg_history(f_pattern, hist_pattern, history, index):
+    result = []
+    for i in range(0, len(history)):
+        history_i = agg_history_i(
+            i=i,
+            f_byrace=list(f_pattern['by_race'].values()),
+            f_bymonth=list(f_pattern['by_month'].values()),
+            hist_pattern=hist_pattern,
+            history=history,
+            index=index,
+        )
+        result.append(history_i)
+    return np.array(result)
+
+def save_feat(player, feat_pattern, hist_pattern, df):
+    name = df[0, player]
+    try:
+        name = int(name)
+    except:
+        return
+
+    f_pattern = feat_pattern[player]
+    df = df.sort('race_date')
+    hist = df.to_numpy()
+    columns = df.columns
+    index = lambda x: columns.index(x)
+    a_agghist = agg_history(f_pattern, hist_pattern, hist, index)
+
+    all_hist = np.column_stack((hist, a_agghist))
+    funcs = list(f_pattern['by_race'].keys()) + list(f_pattern['by_month'].keys())
+    past_columns = [f"{col}_{x}" for col in funcs for x in hist_pattern]
+    df_feat = pd.DataFrame(all_hist, columns=columns+past_columns)
+    df_feat = (
+        pl.from_pandas(df_feat)
+        .with_column(
+            pl.col([pl.Int8, pl.Int16, pl.Int32, pl.Int64]).cast(pl.Float64),
+        )
     )
+    df_feat.write_ipc(f'feat/{player}_{name}.feather')
 
 def prepare():
     print(f'loading {config.netkeiba_file}')
@@ -242,63 +203,57 @@ def prepare():
     )
 
     print('rating')
-    df_ratings = pl.read_ipc(config.rating_file)
     df_ratings = rate_all(df_encoded)
     df_ratings.write_ipc(config.rating_file)
     df_encoded = pl.concat([df_encoded, df_ratings], how='horizontal')
-    hist_pattern = config.hist_pattern
-    feat_pattern = config.feature_pattern
+    hist_pattern = featlist.hist_pattern
+    feat_pattern = featlist.feature_pattern
     players = list(feat_pattern.keys())
-    
+
     for player in players:
-        print(player)
         n_players = pl.n_unique(df_encoded[player])
-        for df_player in tqdm(df_encoded.groupby(player, maintain_order=True), total=n_players):
-            f_pattern = feat_pattern[player]
-            df_with_interval = df_player.with_columns([
-                pl.col('race_date').diff().dt.days().fill_null(0).alias('interval'),
-                pl.col('race_date').shift().alias('past_race'),
-            ])
-            df_feat_byrace = [featcols_past_nrace(df_with_interval, n, f_pattern['by_race']) for n in hist_pattern]
-            df_feat_bymonth = [featcols_past_nmonth(df_with_interval, n, f_pattern['by_month']) for n in hist_pattern]
-            df_feat = pl.concat(
-                [
-                    df_with_interval,
-                    *df_feat_byrace,
-                    *df_feat_bymonth,
-                ],
-                how='horizontal'
-            )
-            name = df_player[0, player]
-            df_feat.write_ipc(f'feat/{player}_{int(name)}.feather')
+        save_player_feat = functools.partial(save_feat, player, feat_pattern, hist_pattern)
+        print(player)
+        for df in tqdm(df_encoded.groupby(player), total=n_players):
+            save_player_feat(df)
 
 def out():
-    feat_pattern = config.feature_pattern
+    feat_pattern = featlist.feature_pattern
     cols = list(feat_pattern.keys())
 
-    df_feats = {}
-    all_feat_files = [p for p in sorted(Path('feat').iterdir(), key=lambda p: p.stat().st_mtime) if p.suffix == '.feather']
+    dfs = {}
     for column in cols:
-        feat_files = [str(p) for p in all_feat_files if column in p.name]
-        dfs = []
         print(column)
-        for file in tqdm(feat_files):
-            # with open(file, 'rb') as f:
-            #     df_chunk = pickle.load(f)
-            df_chunk = pd.read_feather(file)
-            dfs.append(df_chunk)
-        df_feats[column] = pd.concat(dfs)
+        dfs[column] = (
+            pl.scan_ipc(f'feat/{column}_*.feather')
+            .fill_null(strategy="zero")
+            .sort(['race_date', 'race_id', 'horse_no'])
+            .collect()
+        )
         print(f'{column} concatted')
-        df_feats[column] = pd.concat([df.sort_values('horse_no') for _, df in df_feats[column].groupby(['race_date', 'race_id'])])
-        df_feats[column] = df_feats[column].reset_index(drop=True)
-        df_feats[column]['id'] = df_feats[column].index
-        print(df_feats[column][['id', 'year', 'race_date', 'race_id', 'horse_no']])
-    df_feat = df_feats[cols[0]]
+        print(dfs[column].select(['year', 'race_date', pl.col('race_id').cast(pl.Int64), 'horse_no']))
+    df = dfs[cols[0]]
     for column in cols[1:]:
-        cols_to_use = df_feats[column].columns.difference(df_feat.columns).tolist() + ['id']
-        df_feat = pd.merge(df_feat, df_feats[column][cols_to_use], on='id')
-    df_feat = utils.reduce_mem_usage(df_feat)
-    df_feat.to_feather(config.feat_file)
+        join_ids = ['race_date', 'race_id', 'horse_no']
+        cols_to_use = list(set(dfs[column].columns) - set(df.columns)) + join_ids
+        df = df.join(dfs[column].select(cols_to_use), on=join_ids, how='left')
+
+    print("downcasting")
+    pd_feat = df.with_column(pl.col('start_time').dt.strftime("%H:%M")).to_pandas()
+    df_fillna = pd_feat.fillna(-1, downcast='infer')
+    fcols = df_fillna.select_dtypes('float').columns
+    icols = df_fillna.select_dtypes('integer').columns
+    df_fillna[fcols] = df_fillna[fcols].apply(pd.to_numeric, downcast='float')
+    df_fillna[icols] = df_fillna[icols].apply(pd.to_numeric, downcast='integer')
+    print(df_fillna.dtypes)
+    print(f"save to {config.feat_file}")
+    df = (
+        pl.from_pandas(df_fillna)
+        .with_column(
+            pl.col('start_time').cast(str).str.strptime(pl.Datetime, "%H:%M")
+        )
+    )
+    df.write_ipc(config.feat_file)
 
 def update():
     if not Path('netkeiba.log').exists():

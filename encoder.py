@@ -53,10 +53,10 @@ class HorseEncoder():
                 pl.col("race_date").dt.ordinal_day().apply(to_cos(365)).alias("cos_racedate"),
                 (pl.col("start_time") - HorseEncoder.start_of_day).dt.seconds().apply(to_cos(86400)).alias("cos_starttime"),
                 (pl.col("time") - pl.col("time").min().over("race_id")).alias("margin"),
-                pl.col("corners").arr.get(-4).alias("corner1"),
-                pl.col("corners").arr.get(-3).alias("corner2"),
-                pl.col("corners").arr.get(-2).alias("corner3"),
-                pl.col("corners").arr.get(-1).alias("corner4"),
+                pl.col("corners").arr.get(-4).cast(pl.Float64).alias("corner1"),
+                pl.col("corners").arr.get(-3).cast(pl.Float64).alias("corner2"),
+                pl.col("corners").arr.get(-2).cast(pl.Float64).alias("corner3"),
+                pl.col("corners").arr.get(-1).cast(pl.Float64).alias("corner4"),
             ])
             .select(pl.exclude("corners"))
             .collect()
@@ -115,7 +115,7 @@ def encode_tanshou():
 
 def encode_hukushou():
     return (
-        pl.when(3 < pl.col("result")).then(0)
+        pl.when(3 < pl.col("result")).then(0.0)
         .when(pl.col("horse_no") == pl.col("hukuno1")).then(100.0/pl.col("hukuno1"))
         .when(pl.col("horse_no") == pl.col("hukuno2")).then(100.0/pl.col("hukuno2"))
         .when(pl.col("horse_no") == pl.col("hukuno3")).then(100.0/pl.col("hukuno3"))
@@ -123,7 +123,7 @@ def encode_hukushou():
 
 def encode_prize():
     return (
-        pl.when(5 < pl.col("result")).then(0)
+        pl.when(5 < pl.col("result")).then(0.0)
         .when(pl.col("result") == 1).then(pl.col("prize1"))
         .when(pl.col("result") == 2).then(pl.col("prize2"))
         .when(pl.col("result") == 3).then(pl.col("prize3"))

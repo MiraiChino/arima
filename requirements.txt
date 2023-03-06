@@ -1,3 +1,4 @@
+addict==2.4.0
 anyio==3.4.0
 appnope==0.1.2
 argon2-cffi==21.3.0
@@ -9,6 +10,7 @@ Babel==2.9.1
 backcall==0.2.0
 beautifulsoup4==4.10.0
 bleach==4.1.0
+catboost
 certifi==2021.10.8
 cffi==1.15.0
 charset-normalizer==2.0.9
@@ -27,6 +29,7 @@ entrypoints==0.3
 fastapi==0.72.0
 Flask==2.2.2
 fonttools==4.28.5
+graphviz==0.20.1
 h11==0.12.0
 httptools==0.3.0
 idna==3.3
@@ -71,6 +74,7 @@ peewee==3.15.3
 pexpect==4.8.0
 pickleshare==0.7.5
 Pillow==8.4.0
+plotly==5.11.0
 prometheus-client==0.12.0
 prompt-toolkit==3.0.24
 ptyprocess==0.7.0
@@ -98,6 +102,7 @@ soupsieve==2.3.1
 sqlite-web==0.4.0
 sse-starlette==0.1.0
 starlette==0.17.1
+tenacity==8.1.0
 terminado==0.12.1
 testpath==0.5.0
 threadpoolctl==3.0.0

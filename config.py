@@ -76,7 +76,7 @@ splits = [
 
 lgb_models = [
     Dict(
-        file=f'lgbrankscore_model{from_date}_{to_date}.pickle',
+        file=f'lgbrankscore_{from_date}_{to_date}.pickle',
         target='score',
         params={
             'objective': 'lambdarank',
@@ -88,7 +88,7 @@ lgb_models = [
         }
     ),
     Dict(
-        file=f'lgbrankprize_model{from_date}_{to_date}.pickle',
+        file=f'lgbrankprize_{from_date}_{to_date}.pickle',
         target='prizeper',
         params={
             'objective': 'lambdarank',
@@ -100,7 +100,7 @@ lgb_models = [
         }
     ),
     Dict(
-        file=f'lgbregprize_model{from_date}_{to_date}.pickle',
+        file=f'lgbregprize_{from_date}_{to_date}.pickle',
         target='prize',
         params={
             'objective': 'regression',
@@ -111,14 +111,11 @@ lgb_models = [
     ),
 ]
 
-# ['gate', 'horse_no', 'name', 'horse_id', 'sex', 'age', 'penalty', 'jockey', 'jockey_id',
-# 'trainer', 'trainer_id', 'race_id', 'field', 'distance', 'turn', 'weather', 'field_condition',
-# 'race_condition', 'place_code', 'cos_racedate', 'cos_starttime', 'last3frel', 'penaltyrel',
-# 'weightrel', 'penaltywgt', 'oddsrslt', ...]
-cat_features = [2, 3, 4, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18] # category変数をインデックス番号で指定
+cat_features = ['name', 'horse_id', 'sex', 'jockey', 'jockey_id', 'trainer','trainer_id',
+                'race_id', 'field', 'turn', 'weather', 'field_condition', 'race_condition', 'place_code']
 cat_models = [
     Dict(
-        file=f'catrankprize_model{from_date}_{to_date}.pickle',
+        file=f'catrankprize_{from_date}_{to_date}.pickle',
         target='prize',
         param={
             'loss_function':'YetiRank',
@@ -136,7 +133,7 @@ cat_models = [
 
 stacking_valid = "'2020-01-01' <= race_date <= '2022-12-31'"
 stacking_model = Dict(
-    file=f'stacking_model{from_date}_{to_date}.pickle',
+    file=f'stacking_{from_date}_{to_date}.pickle',
     target='score',
     params={
         'objective': 'lambdarank',

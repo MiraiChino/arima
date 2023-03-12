@@ -24,29 +24,41 @@ def parse_args():
     return parser.parse_args()
 
 def search_history(target_row, hist_pattern, feat_pattern, df):
-    row_df = pd.DataFrame([target_row]).reset_index()
-    if 'id' not in row_df.columns:
-        row_df['id'] = None
-    if 'index' not in row_df.columns:
-        row_df['index'] = None
-    hist_df = row_df.copy(deep=True)
-    condition = ' or '.join(f'{column}=={target_row[column]}' for column in feat_pattern.keys())
-    condition_df = df.query(condition)
-
+    columns = df.columns
+    index = lambda x: columns.index(x)
+    condition = [(pl.col(column) == target_row[index(column)]) for column in feat_pattern.keys()]
+    hist = df.filter(pl.any(condition))
+    def latest_newr(player):
+        id = target_row[index(f'{player}_id')]
+        player_newr = df.filter(pl.col(f'{player}_id') == id).select(f'{player}_newr')
+        latest_player_newr = player_newr.row(-1)[0]
+        return latest_player_newr
+    
+    players = ['horse', 'jockey', 'trainer']
+    oldrs = [latest_newr(p) for p in players]
+    feats = np.array([*target_row, *oldrs]) # 66 + 3
+    remove = ['horse_newr', 'jockey_newr', 'trainer_newr']
+    feat_columns = [c for c in df.columns if c not in remove] # 72 - 3
     for column in feat_pattern.keys():
-        funcs = list(feat_pattern[column].values())
-        past_columns = [f'{col}_{x}' for col in list(feat_pattern[column].keys()) for x in hist_pattern]
-        hist = condition_df.query(f'{column}=={target_row[column]}')
-        hist = pd.concat([hist, row_df])
-        a, columns, index = df2np(hist)
-        targetrow_agg = agg_history_i(len(a)-1, funcs, hist_pattern, a, index)
-        row_df_column = pd.DataFrame([targetrow_agg], columns=past_columns)
-        hist_df = pd.concat([hist_df, row_df_column], axis='columns')
-        # TODO: ratingも追加
-        sorted_rating = hist.sort_values('race_id', ascending=False)
-        import pdb; pdb.set_trace()
-        latest_rating = sorted_rating[f'{column}_rnew'][0]
-    return hist_df
+        hist_target = hist.filter(pl.col(column) == target_row[index(column)])
+        row = target_row + hist_target.select('^.*newr$').row(-1)
+        nphist_target = hist_target.select(pl.exclude('^.*newr$')).to_numpy()
+        nphist_target = np.append(nphist_target, [row], axis=0)
+        f_pattern = feat_pattern[column]
+        funcs = list(f_pattern['by_race'].keys()) + list(f_pattern['by_month'].keys())
+        feat = agg_history_i(
+            i=len(nphist_target)-1,
+            f_byrace=list(f_pattern['by_race'].values()),
+            f_bymonth=list(f_pattern['by_month'].values()),
+            hist_pattern=hist_pattern,
+            history=nphist_target,
+            index=index,
+        )
+        feats = np.append(feats, feat)
+        past_columns = [f"{col}_{x}" for col in funcs for x in hist_pattern]
+        feat_columns += past_columns
+    df_result = pd.DataFrame([feats], columns=feat_columns)
+    return df_result
 
 def rate_all(df):
     env = TrueSkill(draw_probability=0.000001)

@@ -28,8 +28,7 @@ def prepare_dataset(df, target):
     x = df.drop(columns=noneed_columns)
     y = x.pop(target)
     logger.info(x[['race_id', 'horse_no']])
-    # logger.info('x.columns')
-    # logger.info(f'{x.columns}')
+    logger.info(f'{len(x.columns)=}')
     return x, y, query
 
 def percent_prize(lower, middle, upper):
@@ -65,8 +64,8 @@ if __name__ == "__main__":
     logger.info(f"prize_percentile: {lower9=}, {middle9=}, {upper9=}")
     df_feat['prizeper'] = df_feat['prize'].map(percent_prize(lower9, middle9, upper9))
 
-    catfeatures_indices = [df_feat.columns.get_loc(c) for c in config.cat_features if c in df_feat]
     l2_valid_x, l2_valid_y, l2_valid_query = prepare_dataset(df_feat.query(config.stacking_valid), target=config.stacking_model.target)
+    catfeatures_indices = [l2_valid_x.columns.get_loc(c) for c in config.cat_features if c in l2_valid_x]
     l2_valid_x_fillna = l2_valid_x.copy()
     l2_valid_x_fillna.iloc[:, catfeatures_indices] = l2_valid_x_fillna.iloc[:, catfeatures_indices].fillna(-1).astype(int)
     l2_valid = Pool(data=l2_valid_x_fillna, label=l2_valid_y, group_id=l2_valid_x['race_id'].tolist(), cat_features=catfeatures_indices)
@@ -153,10 +152,10 @@ if __name__ == "__main__":
     # stacking
     model = config.stacking_model
     logger.info(f'train: {model}')
-    train_x = np.hstack((np.vstack(l1_valid_xs), np.vstack(predicted_l1_valid_xs))) # (544868, 756)
+    train_x = np.hstack((np.vstack(l1_valid_xs), np.vstack(predicted_l1_valid_xs))) # (544868, 752+4)
     train_y = np.hstack(l1_valid_ys) # (544868,)
     train_query = np.fromiter(itertools.chain(*queries), int)
-    valid_x = np.hstack((l2_valid_x, np.mean(predicted_l2_valid_xs, axis=0))) # (142983, 756)
+    valid_x = np.hstack((l2_valid_x, np.mean(predicted_l2_valid_xs, axis=0))) # (142983, 752+4)
     valid_y = l2_valid_y # (142983,)
     valid_query = l2_valid_query
     train = Dataset(train_x, train_y, group=train_query)

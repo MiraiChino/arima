@@ -1,16 +1,19 @@
 import argparse
 import itertools
 import math
+import re
 from dataclasses import dataclass, field
 
 import dill as pickle
 import numpy as np
 import pandas as pd
+import polars as pl
 from sklearn.preprocessing import scale
 
 import chrome
 import config
-import feature_extractor
+import featlist
+import feature
 import netkeiba
 
 
@@ -107,46 +110,96 @@ def min_bet(odds, max_return=100000):
 def result_prob(df, task_logs=[]):
     task_logs.append(f"loading {config.encoder_file}")
     with open(config.encoder_file, "rb") as f:
-        netkeiba_encoder = pickle.load(f)
-    task_logs.append(f"encoding")
-    df_format = netkeiba_encoder.format(df)
-    df_encoded = netkeiba_encoder.transform(df_format)
-    race_date = df_encoded["race_date"][0]
+        horse_encoder = pickle.load(f)
 
-    task_logs.append(f"loading {config.avetime_file}")
-    df_avetime = pd.read_feather(config.avetime_file)
-    ave_time = {(f, d, fc): t for f, d, fc, t in df_avetime.to_dict(orient="split")["data"]}
-    hist_pattern = config.hist_pattern
-    feat_pattern = config.feature_pattern(ave_time)
+    task_logs.append(f"encoding")
+    df = df.with_columns([
+        pl.lit(None).alias('tanno1'),
+        pl.lit(None).alias('tanno2'),
+        pl.lit(None).alias('hukuno1'),
+        pl.lit(None).alias('hukuno2'),
+        pl.lit(None).alias('hukuno3'),
+        pl.lit(None).alias('tan1'),
+        pl.lit(None).alias('tan2'),
+        pl.lit(None).alias('huku1'),
+        pl.lit(None).alias('huku2'),
+        pl.lit(None).alias('huku3'),
+        pl.col('corner').cast(str),
+        pl.col('last3f').cast(float),
+        pl.col('weight').cast(float),
+        pl.col('time').cast(float),
+    ])
+    df_formatted = horse_encoder.format(df)
+    df_encoded = horse_encoder.transform(df_formatted)
+    df_encoded = df_encoded.with_columns([
+        pl.col('race_date').cast(pl.Datetime),
+        pl.col('field').cast(pl.Int8),
+        pl.col('distance').cast(pl.Int16),
+        pl.col('field_condition').cast(pl.Int8),
+    ])
 
     task_logs.append(f"loading {config.feat_file}")
-    history = pd.read_feather(config.feat_file)
-    task_logs.append(f"searching race history")
+    history = pl.read_ipc(config.feat_file)
+    hist_pattern = featlist.hist_pattern
+    feat_pattern = featlist.feature_pattern
 
-    condition = " or ".join(f"{column}=={df_encoded[column].tolist()}" for column in feat_pattern.keys())
-    hist = history.query(f"race_date < '{race_date}' and ({condition})")
-    hist["race_date"] = pd.to_datetime(hist["race_date"])
-    hist = hist.sort_values("race_date")
-    hist = hist.loc[:, :'score']
+    task_logs.append(f"searching race history")
+    condition = [pl.col(column).is_in(df_encoded[column].to_list()) for column in feat_pattern.keys()]
+    race_date = df_encoded["race_date"][0]
+    hist = history.filter((pl.col('race_date') < race_date) & pl.any(condition))
+    hist = hist.select([
+        *df_encoded.columns,
+        'avetime',
+        'horse_oldr', 'jockey_oldr', 'trainer_oldr',
+        'horse_newr', 'jockey_newr', 'trainer_newr',
+    ])
+    race_condition = ['field', 'distance', 'field_condition']
+    avetime = hist.select([*race_condition, 'avetime']).unique(subset=[*race_condition, 'avetime'])
+    df_encoded = df_encoded.join(avetime, on=race_condition, how='left')
     df_feat = pd.DataFrame()
-    for index, row in df_encoded.iterrows():
-        df_agg = feature_extractor.search_history(row, hist_pattern, feat_pattern, hist)
+    for row in df_encoded.rows():
+        df_agg = feature.search_history(row, hist_pattern, feat_pattern, hist)
         df_feat = pd.concat([df_feat, df_agg])
-    noneed_columns = [c for c in config.NONEED_COLUMNS if c not in netkeiba.RACE_PAY_COLUMNS]
-    df_feat = df_feat.drop(columns=noneed_columns)
-    probs = []
-    model_files = [f"{i}_{file}" for file in (config.rankscore_file, config.rankprize_file, config.reg_file) for i in range(len(config.splits))]
-    # model_files = [f"{i}_{file}" for file in (config.rank_file, config.reg_file) for i in range(len(config.splits))]
+    noneed_columns = [c for c in config.NONEED_COLUMNS if c in df_feat.columns]
+    df_feat = df_feat.drop(columns=noneed_columns) # (16, 752)
+    
     task_logs.append(f"predict")
-    for model_file in model_files:
-        with open(model_file, "rb") as f:
-            model = pickle.load(f)
-            pred = model.predict(df_feat.values, num_iteration=model.best_iteration)
-            pred_prob = probability(pred)
-            probs.append(pred_prob)
-            task_logs.append(f"{model_file}:")
-            task_logs.append(f"{[f'{p*100:.2f}%' for p in pred_prob]}")
-    prob = np.array(probs).mean(axis=0)
+    preds = []
+    re_modelfile = re.compile(r"^models/(.*)_\d+.*_\d+.*$")
+    for model in config.lgb_models:
+        preds_lgb = []
+        for i in range(len(config.splits)):
+            model_file = f"models/{i}_{model.file}"
+            model_name = re_modelfile.match(model_file).groups()[0]
+            with open(model_file, "rb") as f:
+                m = pickle.load(f)
+                pred = m.predict(df_feat.values, num_iteration=m.best_iteration)
+                preds_lgb.append(pred)
+                task_logs.append(f"{model_name}: {[f'{p*100:.1f}%' for p in probability(pred)]}")
+        preds.append(preds_lgb)
+    for model in config.cat_models:
+        preds_cat = []
+        for i in range(len(config.splits)):
+            model_file = f"models/{i}_{model.file}"
+            model_name = re_modelfile.match(model_file).groups()[0]
+            with open(model_file, "rb") as f:
+                m = pickle.load(f)
+                for col in config.cat_features:
+                    df_feat[col] = df_feat[col].astype('int64')
+                pred = m.predict(df_feat.values, prediction_type='RawFormulaVal')
+                preds_cat.append(pred)
+                task_logs.append(f"{model_name}: {[f'{p*100:.1f}%' for p in probability(pred)]}")
+        preds.append(preds_cat)
+    stacked_feat = np.array(preds).mean(axis=1).T # (16, 4)
+    x = np.hstack([df_feat, stacked_feat]) # (16, 756)
+    model = config.stacking_model
+    model_file = f"models/{model.file}"
+    model_name = re_modelfile.match(model_file).groups()[0]
+    with open(model_file, "rb") as f:
+        m = pickle.load(f)
+        pred = m.predict(x, num_iteration=m.best_iteration)
+        prob = probability(pred)
+        task_logs.append(f"{model_name}: {[f'{p*100:.1f}%' for p in probability(pred)]}")
     return {i: p for i, p in zip(df_feat["horse_no"].to_list(), prob)}
 
 def baken_prob(prob, names):
@@ -304,9 +357,9 @@ def good_baken(baken, odd_th=2.0):
 if __name__ == "__main__":
     args = parse_args()
     race_data, horses = netkeiba.scrape_shutuba(args.race_id)
-    df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
-    df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_PRE_COLUMNS)
-    df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
+    df_horses = pl.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
+    df_races = pl.DataFrame([race_data], columns=netkeiba.RACE_PRE_COLUMNS)
+    df_original = df_horses.join(df_races, on='race_id', how='left')
     print(df_original)
     p = result_prob(df_original)
     print(p)

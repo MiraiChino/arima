@@ -4,7 +4,7 @@ import pickle
 import traceback
 from typing import List
 
-import pandas as pd
+import polars as pl
 from domonic.html import *
 
 import css
@@ -75,19 +75,20 @@ class PredictBaken(Task):
                 return
             self.logs.append(f"scraping: https://race.netkeiba.com/race/shutuba.html?race_id={race_id}")
             race_data, horses = netkeiba.scrape_shutuba(race_id)
-            df_horses = pd.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
-            df_races = pd.DataFrame([race_data], columns=netkeiba.RACE_PRE_COLUMNS)
-            df_original = pd.merge(df_horses, df_races, on='race_id', how='left')
-            race_info = DotDict(df_original.loc[0, :].to_dict())
-            if df_original['horse_no'].isnull().sum() == len(df_original['horse_no']):
+            df_horses = pl.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
+            df_races = pl.DataFrame([race_data], columns=netkeiba.RACE_PRE_COLUMNS)
+            df = df_horses.join(df_races, on='race_id', how='left')
+            race_info = DotDict(df.row(0, named=True)._asdict())
+            if df['horse_no'].null_count() == len(df['horse_no']):
                 self.logs.append(f"assign temporary horse number because failed to scrape it")
-                df_original['horse_no'] = pd.Series([i for i in range(1, 1+len(df_original['horse_no']))])
+                temporary_horse_no = pl.Series([i for i in range(1, 1+len(df['horse_no']))])
+                df.replace('horse_no', temporary_horse_no)
             self.logs.append(f"scraped horse data")
-            for no, name in zip(df_original["horse_no"].to_list(), df_original["name"].to_list()):
+            for no, name in zip(df["horse_no"].to_list(), df["name"].to_list()):
                 self.logs.append(f"{no}: {name}")
-            result_prob = predict.result_prob(df_original, task_logs=self.logs)
-            names = {no: name for no, name in zip(df_original["horse_no"].to_list(), df_original["name"].to_list())}
-            for no, name, p in zip(df_original["horse_no"].to_list(), df_original["name"].to_list(), result_prob.values()):
+            result_prob = predict.result_prob(df, task_logs=self.logs)
+            names = {no: name for no, name in zip(df["horse_no"].to_list(), df["name"].to_list())}
+            for no, name, p in zip(df["horse_no"].to_list(), df["name"].to_list(), result_prob.values()):
                 self.logs.append(f"{p*100:.2f}% {no}: {name}")
             baken = predict.baken_prob(result_prob, names)
             with open(baken_pickle, 'wb') as f:

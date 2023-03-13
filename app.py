@@ -163,4 +163,4 @@ def race_html(race_id: str, request: Request):
         ))))
 
 if __name__ == "__main__":
-    uvicorn.run(app, debug=True, host="0.0.0.0", port=8080)
+    uvicorn.run('app:app', reload=True, host="0.0.0.0", port=8080)

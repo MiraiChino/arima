@@ -44,7 +44,7 @@ def p1(no1_index, probs):
 
 def p12(no1_index, no2_index, probs, g=0.81):
     p2 = probs[no2_index]**g / sum(x**g for x in probs.values())
-    return p1(no1_index, probs), p2, 
+    return p1(no1_index, probs), p2
 
 def p123(no1_index, no2_index, no3_index, probs, d=0.65):
     p3 = probs[no3_index]**d / sum(x**d for x in probs.values())
@@ -162,7 +162,6 @@ def result_prob(df, task_logs=[]):
         df_feat = pd.concat([df_feat, df_agg])
     noneed_columns = [c for c in config.NONEED_COLUMNS if c in df_feat.columns]
     df_feat = df_feat.drop(columns=noneed_columns) # (16, 752)
-    
     task_logs.append(f"predict")
     preds = []
     re_modelfile = re.compile(r"^models/(.*)_\d+.*_\d+.*$")

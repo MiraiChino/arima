@@ -31,7 +31,10 @@ def search_history(target_row, hist_pattern, feat_pattern, df):
     def latest_newr(player):
         id = target_row[index(f'{player}_id')]
         player_newr = df.filter(pl.col(f'{player}_id') == id).select(f'{player}_newr')
-        latest_player_newr = player_newr.row(-1)[0]
+        if 0 < player_newr.height:
+            latest_player_newr = player_newr.row(-1)[0]
+        else:
+            latest_player_newr = 0.0
         return latest_player_newr
     
     players = ['horse', 'jockey', 'trainer']
@@ -41,22 +44,26 @@ def search_history(target_row, hist_pattern, feat_pattern, df):
     feat_columns = [c for c in df.columns if c not in remove] # 72 - 3
     for column in feat_pattern.keys():
         hist_target = hist.filter(pl.col(column) == target_row[index(column)])
-        row = target_row + hist_target.select('^.*newr$').row(-1)
-        nphist_target = hist_target.select(pl.exclude('^.*newr$')).to_numpy()
-        nphist_target = np.append(nphist_target, [row], axis=0)
         f_pattern = feat_pattern[column]
         funcs = list(f_pattern['by_race'].keys()) + list(f_pattern['by_month'].keys())
-        feat = agg_history_i(
-            i=len(nphist_target)-1,
-            f_byrace=list(f_pattern['by_race'].values()),
-            f_bymonth=list(f_pattern['by_month'].values()),
-            hist_pattern=hist_pattern,
-            history=nphist_target,
-            index=index,
-        )
-        feats = np.append(feats, feat)
         past_columns = [f"{col}_{x}" for col in funcs for x in hist_pattern]
         feat_columns += past_columns
+        if hist_target.height == 0:
+            feat = np.empty(len(past_columns))
+            feat[:] = np.nan
+        else:
+            row = target_row + hist_target.select('^.*newr$').row(-1)
+            nphist_target = hist_target.select(pl.exclude('^.*newr$')).to_numpy()
+            nphist_target = np.append(nphist_target, [row], axis=0)
+            feat = agg_history_i(
+                i=len(nphist_target)-1,
+                f_byrace=list(f_pattern['by_race'].values()),
+                f_bymonth=list(f_pattern['by_month'].values()),
+                hist_pattern=hist_pattern,
+                history=nphist_target,
+                index=index,
+            )
+        feats = np.append(feats, feat)
     df_result = pd.DataFrame([feats], columns=feat_columns)
     return df_result
 

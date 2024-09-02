@@ -59,7 +59,11 @@ def extract_result(text):
     result, gate, horse_no, name, sa, penalty, jockey,\
         time, margin, pop, odds, last3f, corner, trainer, w, _ = text.split(",")
     try:
-        result = int(result)
+        if result not in ['取消', '中止', '除外']:
+            result = int(result)
+        else:
+            print(f"Result is '{result}' and cannot be converted to an integer.")
+            result = None
     except Exception as e:
         print(e)
         result = None

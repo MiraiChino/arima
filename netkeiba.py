@@ -9,6 +9,7 @@ import polars as pl
 import requests
 from bs4 import BeautifulSoup
 from tqdm import tqdm
+from selenium.webdriver.common.by import By  # 追加
 
 import chrome
 import config
@@ -87,72 +88,71 @@ def scrape_raceids(driver, race_date):
     print(f"scraping: {racelist_url}")
     driver.get(racelist_url)
     if driver.wait_all_elements():
-        for race in driver.find_elements_by_css_selector("li.RaceList_DataItem"):
-            href = race.find_element_by_css_selector("a").get_attribute("href")
+        for race in driver.find_elements(By.CSS_SELECTOR, "li.RaceList_DataItem"):  # 修正
+            href = race.find_element(By.CSS_SELECTOR, "a").get_attribute("href")  # 修正
             match = text.raceid.findall(href)
             if len(match) > 0:
                 race_id = match[0]
                 yield race_id
 
-@scraping
-def scrape_results(race_id):
-    race_url = f"{BASE_URL}/race/result.html?race_id={race_id}&rf=race_list"
-    print(f"scraping: {race_url}")
-    race_html = requests.get(race_url)
-    s = soup_html(race_html)
-    racename = text.remove_trash(s.find("div", class_="RaceName").text)
+def extract_race_data(s, race_id):
+    racename_div = s.find("div", class_="RaceName")
+    racename_h1 = s.find("h1", class_="RaceName")
+
+    racename = text.remove_trash(racename_div.text) if racename_div else text.remove_trash(racename_h1.text) if racename_h1 else None
+
     racedata11 = text.extract_racedata11(s.find("div", class_="RaceData01").text)
     racedata12 = text.extract_racedata12(s.find("div", class_="RaceData01").text)
     racedata2 = text.extract_racedata2(s.find("div", class_="RaceData02"))
     racedata3 = text.extract_racedata3(race_id)
     racedate = s.find("dd", class_="Active").text
-    div_payback = s.find("div", class_="FullWrap")
-    tr_paybacks = {c: div_payback.find("tr", class_=c) for c in ("Tansho", "Fukusho", "Umaren", "Wide", "Umatan", "Fuku3", "Tan3")}
-    tanno, hukuno, payback = text.extract_payback(**tr_paybacks)
-    race_data = [race_id, racename, *racedata11, *racedata12, *racedata2, *racedata3, racedate, *tanno, *hukuno, *payback]
+    return racename, racedata11, racedata12, racedata2, racedata3, racedate
+
+def scrape_data(url):
+    print(f"scraping: {url}")
+    try:
+        html = requests.get(url)
+        html.raise_for_status()  # HTTPエラーをチェック
+        return soup_html(html)
+    except requests.RequestException as e:
+        print(f"Error fetching data from {url}: {e}")
+        return None
+
+def scrape_race_info(race_id, race_type):
+    url_map = {
+        "results": f"{BASE_URL}/race/result.html?race_id={race_id}&rf=race_list",
+        "shutuba": f"{BASE_URL}/race/shutuba.html?race_id={race_id}"
+    }
+    url = url_map.get(race_type)
+    if not url:
+        raise ValueError("Invalid race type provided.")
+
+    s = scrape_data(url)
+    if s is None:
+        return None, []
+
+    return extract_race_info(s, race_id)
+
+def extract_race_info(s, race_id):
+    racename, racedata11, racedata12, racedata2, racedata3, racedate = extract_race_data(s, race_id)
+    horses = extract_horses(s, race_id)
+    return [race_id, racename, *racedata11, *racedata12, *racedata2, *racedata3, racedate], horses
+
+def extract_horses(s, race_id):
     horses = []
-    for horse_html in s.find_all("tr",class_="HorseList"):
+    for horse_html in s.find_all("tr", class_="HorseList"):
         result = [*text.extract_result(horse_html), race_id]
         if result.count(None) != len(result):
             horses.append(result)
-    return race_data, horses 
+    return horses
+
+@scraping
+def scrape_results(race_id):
+    return scrape_race_info(race_id, "results")
 
 @scraping
 def scrape_shutuba(race_id):
-    shutuba_url = f"{BASE_URL}/race/shutuba.html?race_id={race_id}"
-    print(f"scraping: {shutuba_url}")
-    shutuba_html = requests.get(shutuba_url)
-    s = soup_html(shutuba_html)
-    racename = text.remove_trash(s.find("div", class_="RaceName").text)
-    racedata11 = text.extract_racedata11(s.find("div", class_="RaceData01").text)
-    racedata12 = text.extract_racedata12(s.find("div", class_="RaceData01").text)
-    racedata2 = text.extract_racedata2(s.find("div", class_="RaceData02"))
-    racedata3 = text.extract_racedata3(race_id)
-    racedate = s.find("dd", class_="Active").text
-    race_data = [race_id, racename, *racedata11, *racedata12, *racedata2, *racedata3, racedate]
-    horses = []
-    for horse_html in s.find_all("tr",class_="HorseList"):
-        shutuba_horse = [*text.extract_shutuba(horse_html), race_id]
-        if shutuba_horse.count(None) != len(shutuba_horse):
-            horses.append(shutuba_horse)
-    return race_data, horses 
-
-@scraping
-def scrape_odds(driver, odds_url, convert_func=None):
-    @chrome.retry(10, verb=True)
-    def scrape_oddstable():
-        tables = soup(driver.page_source).find_all("table", class_="RaceOdds_HorseList_Table")
-        odds_list = text.extract_odds(tables[0])
-        if convert_func:
-            result = convert_func(odds_list)
-        else:
-            result = odds_list
-        return result
-    print(f"scraping: {odds_url}")
-    driver.get(odds_url)
-    if driver.wait_all_elements():
-        odds_list = scrape_oddstable()
-        return odds_list
+    return scrape_race_info(race_id, "shutuba")
 
 def scrape_tanhuku(driver, race_id):
     tanhuku_url = f"{BASE_URL}/odds/index.html?race_id={race_id}"
@@ -178,8 +178,8 @@ def scrape_12odds(driver, url, odds_convert=None):
     umaren_odds = {}
     if driver.wait_all_elements():
         no12_odds = []
-        for table in driver.find_elements_by_css_selector("table.Odds_Table"):
-            col_label = table.find_element_by_css_selector("tr.col_label")
+        for table in driver.find_elements(By.CSS_SELECTOR, "table.Odds_Table"):  # 修正
+            col_label = table.find_element(By.CSS_SELECTOR, "tr.col_label")  # 修正
             no2 = int(text.remove_trash(col_label.text))
             odds_list = text.extract_odds(table.get_attribute("innerHTML"))
             converted_odds = []
@@ -215,7 +215,7 @@ def scrape_ninki(driver, ninki_url, convert_func=None):
     @chrome.retry(10, verb=True)
     def scrape_oddstable():
         time.sleep(1)
-        table = driver.find_element_by_css_selector("table.RaceOdds_HorseList_Table")
+        table = driver.find_element(By.CSS_SELECTOR, "table.RaceOdds_HorseList_Table")  # 修正
         odds_list = text.extract_odds(table.get_attribute("innerHTML"))
         if convert_func:
             result = convert_func(odds_list)

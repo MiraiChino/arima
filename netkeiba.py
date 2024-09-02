@@ -258,9 +258,6 @@ def scrape_sanrenpuku_generator(driver, race_id):
 
 
 if __name__ == "__main__":
-    netkeiba_log = Path("netkeiba.log")
-    netkeiba_log.unlink(missing_ok=True)
-
     last_updated = sorted(Path("netkeiba").iterdir(), key=lambda p: p.stat().st_mtime)[-1]
     if ".DS_Store" in last_updated.stem:
         last_updated = sorted(Path("netkeiba").iterdir(), key=lambda p: p.stat().st_mtime)[-2]
@@ -291,7 +288,7 @@ if __name__ == "__main__":
                 print(f"Error(race_id={race_id}): {e}")
 
             try:
-                race_df = pd.DataFrame(races, columns=RACE_AFTER_COLUMNS)
+                race_df = pd.DataFrame(races, columns=RACE_PRE_COLUMNS)
                 race_df = pl.from_pandas(race_df)
                 race_df.write_ipc(race_file)
                 print(f"saved: {year}-{month} races -> {race_file}")
@@ -301,8 +298,6 @@ if __name__ == "__main__":
                 horse_df.write_ipc(horse_file)
                 print(f"saved: {year}-{month} horses -> {horse_file}")
 
-                with open(netkeiba_log, 'a') as f:
-                    f.write(f"netkeiba/netkeiba{year}-{month}")
 
             except Exception as e:
                 print(e)

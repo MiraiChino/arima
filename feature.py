@@ -17,13 +17,30 @@ from encoder import HorseEncoder
 
 
 def parse_args():
+    """
+    コマンドライン引数を解析します。
+
+    Returns:
+        Namespace: 解析された引数を含むオブジェクト。
+    """
     parser = argparse.ArgumentParser()
-    parser.add_argument('--update', action='store_true')
     parser.add_argument('--prepare', action='store_true')
     parser.add_argument('--out', action='store_true')
     return parser.parse_args()
 
 def search_history(target_row, hist_pattern, feat_pattern, df):
+    """
+    特定の行に基づいて履歴データを検索し、特徴量を生成します。
+
+    Args:
+        target_row (list): 対象の行データ。
+        hist_pattern (dict): 履歴パターンの辞書。
+        feat_pattern (dict): 特徴量パターンの辞書。
+        df (DataFrame): 検索対象のデータフレーム。
+
+    Returns:
+        DataFrame: 生成された特徴量を含むデータフレーム。
+    """
     columns = df.columns
     index = lambda x: columns.index(x)
     condition = [(pl.col(column) == target_row[index(column)]) for column in feat_pattern.keys()]
@@ -68,6 +85,15 @@ def search_history(target_row, hist_pattern, feat_pattern, df):
     return df_result
 
 def rate_all(df):
+    """
+    競馬データの評価を行い、プレイヤーのレーティングを更新します。
+
+    Args:
+        df (DataFrame): 評価対象のデータフレーム。
+
+    Returns:
+        DataFrame: 更新されたレーティングを含むデータフレーム。
+    """
     env = TrueSkill(draw_probability=0.000001)
     df_use = (
         df.select([
@@ -120,12 +146,40 @@ def rate_all(df):
 
 
 def calc(f, past_j, row, index, nan):
+    """
+    過去のデータに基づいて計算を行います。
+
+    Args:
+        f (function): 計算に使用する関数。
+        past_j (array): 過去のデータ。
+        row (array): 現在の行データ。
+        index (function): 列名をインデックスに変換する関数。
+        nan (float): NaN値。
+
+    Returns:
+        float: 計算結果またはNaN。
+    """
     if past_j.any():
         return f(past_j, row, index)
     else:
         return nan
 
 def agg_history_i(i, f_byrace, f_bymonth, hist_pattern, history, index, mo=timedelta(days=30)):
+    """
+    特定のインデックスに基づいて履歴データを集約します。
+
+    Args:
+        i (int): 集約対象のインデックス。
+        f_byrace (list): レースごとの集約関数のリスト。
+        f_bymonth (list): 月ごとの集約関数のリスト。
+        hist_pattern (dict): 履歴パターンの辞書。
+        history (array): 履歴データ。
+        index (function): 列名をインデックスに変換する関数。
+        mo (timedelta): 月の期間（デフォルトは30日）。
+
+    Returns:
+        array: 集約された履歴データ。
+    """
     no_hist = np.empty(((len(f_byrace) + len(f_bymonth)) * len(hist_pattern),))
     no_hist[:] = np.nan
     row = history[i, :]
@@ -161,6 +215,18 @@ def agg_history_i(i, f_byrace, f_bymonth, hist_pattern, history, index, mo=timed
         return no_hist
 
 def agg_history(f_pattern, hist_pattern, history, index):
+    """
+    履歴データを集約し、特徴量を計算します。
+
+    Args:
+        f_pattern (dict): 特徴量パターンの辞書。
+        hist_pattern (dict): 履歴パターンの辞書。
+        history (array): 履歴データ。
+        index (function): 列名をインデックスに変換する関数。
+
+    Returns:
+        array: 集約された履歴データの配列。
+    """
     result = []
     for i in range(0, len(history)):
         history_i = agg_history_i(
@@ -175,6 +241,15 @@ def agg_history(f_pattern, hist_pattern, history, index):
     return np.array(result)
 
 def save_feat(player, feat_pattern, hist_pattern, df):
+    """
+    プレイヤーごとの特徴量をファイルに保存します。
+
+    Args:
+        player (str): プレイヤーの名前。
+        feat_pattern (dict): 特徴量パターンの辞書。
+        hist_pattern (dict): 履歴パターンの辞書。
+        df (DataFrame): 特徴量を生成するためのデータフレーム。
+    """
     name = df[0, player]
     try:
         name = int(name)
@@ -201,6 +276,9 @@ def save_feat(player, feat_pattern, hist_pattern, df):
     df_feat.write_ipc(f'feat/{player}_{name}.feather')
 
 def prepare():
+    """
+    データを読み込み、エンコードし、評価を行います。
+    """
     print(f'loading {config.netkeiba_file}')
     df_original = pl.read_ipc(config.netkeiba_file)
 
@@ -237,6 +315,9 @@ def prepare():
             save_player_feat(df)
 
 def out():
+    """
+    特徴量を結合し、最終的なデータセットを保存します。
+    """
     feat_pattern = featlist.feature_pattern
     cols = list(feat_pattern.keys())
 
@@ -274,81 +355,8 @@ def out():
     )
     df.write_ipc(config.feat_file)
 
-def update():
-    if not Path('netkeiba.log').exists():
-        print(f'no {config.encoder_file}')
-        return
-    with open('netkeiba.log', 'r') as f:
-        filenames = f.readlines()
-
-    dfs = []
-    for filename in filenames:
-        df_races = pd.read_feather(f'{filename}.races.feather')
-        df_horses = pd.read_feather(f'{filename}.horses.feather')
-        df = pd.merge(df_horses, df_races, on='race_id', how='left')
-        dfs.append(df)
-    df_original = pd.concat(dfs)
-    if 'index' in df_original.columns:
-        df_original = df_original.drop(columns='index')
-
-    if not Path(config.encoder_file).exists():
-        print(f'no {config.encoder_file}')
-        return
-    with open(config.encoder_file, 'rb') as f:
-        horse_encoder = pickle.load(f)
-    df_format = horse_encoder.format(df_original)
-    df_encoded = horse_encoder.transform(df_format)
-
-    # TODO: avetimeを再計算する
-    df_avetime = pd.read_feather(config.avetime_file)
-    ave_time = {(f, d, fc): t for f, d, fc, t in df_avetime.to_dict(orient='split')['data']}
-    feat_pattern = config.feature_pattern
-    cols = list(feat_pattern.keys())
-    for column in cols:
-        print(column)
-        past_columns = [f'{col}_{x}' for col in list(feat_pattern[column].keys()) for x in config.hist_pattern]
-        funcs = list(feat_pattern[column].values())
-
-        for name in tqdm(df_encoded[column].unique()):
-            try:
-                print(f'{column}_{int(name)}')
-                # TODO: なかったら新しく作る
-                df_feat = pd.read_feather(f'feat/{column}_{int(name)}.feather')
-                pre_hist = df_feat.drop(columns=past_columns)
-                # TODO: 必ず追加するようになっているので、同じ行があったら削除する
-                # TODO: 同じ馬を何回も計算してる
-                # TODO: 馬１匹のfeatを１つ減らしてためす
-                rows = df_encoded.query(f'{column}=={name}')
-                hist = pd.concat([pre_hist, rows])
-                hist_nodup = hist.drop_duplicates(subset=['result', 'gate', 'horse_no', 'name', 'race_date', 'prize'])
-                print(len(hist_nodup), len(pre_hist))
-                if len(hist_nodup) <= len(pre_hist):
-                    continue
-                print(len(hist_nodup), len(pre_hist))
-                a, columns, index = df2np(hist_nodup)
-                print(df_feat[['result', 'horse_no', 'name', 'prize', 'horse_prize_999999']])
-                print(hist_nodup[['result', 'horse_no', 'name', 'prize']])
-                import pdb; pdb.set_trace()
-                # ここからは未確認
-                for i in range(len(pre_hist), len(hist_nodup)):
-                    targetrow_agg = agg_history_i(i, funcs, config.hist_pattern, a, index)
-                    row_df_column = pd.DataFrame([targetrow_agg], columns=past_columns)
-                    import pdb; pdb.set_trace()
-                    # hist_df = pd.concat([hist_df, row_df_column], axis='columns')
-                    # df_agg = search_history(row, config.hist_pattern, feat_pattern, df_hist)
-                    # new_feat = pd.concat([df_feat, df_agg]).reset_index(drop=True)
-            except:
-                import traceback
-                print(traceback.format_exc())
-                print(f"didn't update feat/{column}_{name}.feather")
-            else:
-                pass
-                # new_feat.to_feather(f'feat/{column}_{name}.feather')
-
 if __name__ == '__main__':
     args = parse_args()
-    if args.update:
-        update()
     if args.prepare:
         prepare()
     if args.out:

@@ -1,4 +1,4 @@
-import math
+import numpy as np
 from datetime import datetime
 
 import polars as pl
@@ -36,7 +36,7 @@ class HorseEncoder():
                 pl.col("trainer_id").cast(pl.Float64),
                 encode_racedate().alias("race_date"),
                 encode_starttime().alias("start_time"),
-                pl.col("time").apply(to_seconds).alias("time"),
+                encode_seconds().alias("time"),
                 pl.col("corner").str.extract_all(r'\d+').alias("corners"),
                 encode_tanshou().alias("tanshou"),
                 encode_hukushou().alias("hukushou"),
@@ -50,13 +50,13 @@ class HorseEncoder():
                 *[pl.Series(col, values) for col, values in zip(HorseEncoder.STR_COLUMNS, np_encoded_T)],
             ])
             .with_columns([
-                pl.col("race_date").dt.ordinal_day().apply(to_cos(365)).alias("cos_racedate"),
-                (pl.col("start_time") - HorseEncoder.start_of_day).dt.seconds().apply(to_cos(86400)).alias("cos_starttime"),
+                encode_cos(pl.col("race_date").dt.ordinal_day(), max=365).alias("cos_racedate"),
+                encode_cos((pl.col("start_time") - HorseEncoder.start_of_day).dt.total_seconds(), max=86400).alias("cos_starttime"),
                 (pl.col("time") - pl.col("time").min().over("race_id")).alias("margin"),
-                pl.col("corners").arr.get(-4).cast(pl.Float64).alias("corner1"),
-                pl.col("corners").arr.get(-3).cast(pl.Float64).alias("corner2"),
-                pl.col("corners").arr.get(-2).cast(pl.Float64).alias("corner3"),
-                pl.col("corners").arr.get(-1).cast(pl.Float64).alias("corner4"),
+                pl.col("corners").list.reverse().list.get(0, null_on_oob=True).cast(pl.Float64).alias("corner4"),
+                pl.col("corners").list.reverse().list.get(1, null_on_oob=True).cast(pl.Float64).alias("corner3"),
+                pl.col("corners").list.reverse().list.get(2, null_on_oob=True).cast(pl.Float64).alias("corner2"),
+                pl.col("corners").list.reverse().list.get(3, null_on_oob=True).cast(pl.Float64).alias("corner1"),
             ])
             .select(pl.exclude("corners"))
             .collect()
@@ -69,42 +69,42 @@ class HorseEncoder():
         df_formatted = self.format(df)
         return self.fit_transform(df_formatted)
 
-def to_cos(max):
-    def wrapper(x):
-        return math.cos(math.radians(90 - (x / max)*360))
-    return wrapper
+def encode_cos(num_col, max):
+    angle = 90 - (num_col / max) * 360
+    radian = angle * np.pi / 180
+    return radian.cos()
 
 def encode_racedate():
-    mm_dd = (
-        pl.col("race_date")
-        .str.extract_all(r'\d+')
-        .arr.eval(
-            pl.element().str.zfill(2)
-        )
-        .arr.join("-")
-    )
     return (
-        pl.concat_str([pl.col("year"), mm_dd], sep="-")
-        .str.strptime(pl.Date, "%Y-%m-%d")
+        pl.format(
+            "{}-{}-{}",
+            pl.col("year"),
+            pl.col("race_date").str.extract(r'(\d+)月'),
+            pl.col("race_date").str.extract(r'(\d+)日')
+        )
+        .str.to_date()
     )
 
 def encode_starttime():
     return (
         pl.col("start_time")
         .str.extract_all(r'\d+')
-        .arr.eval(
+        .list.eval(
             pl.element().str.zfill(2)
         )
-        .arr.join(":")
+        .list.join(":")
         .str.strptime(pl.Datetime, "%H:%M")
     )
 
-def to_seconds(x):
-    if not x:
-        return None
-    min, secdot = x.split(':')
-    sec, ms100 = secdot.split('.')
-    return int(min)*60 + int(sec) + int(ms100)*0.1
+def extract_int(col_name, i):
+    return pl.col(col_name).str.extract_all(r'\d+').list.get(i, null_on_oob=True).str.to_integer(strict=False)
+
+def encode_seconds():
+    return (
+        extract_int("time", 0) * 60 +
+        extract_int("time", 1) +
+        extract_int("time", 2) * 0.1
+    )
 
 def encode_tanshou():
     return (

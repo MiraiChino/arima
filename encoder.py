@@ -27,9 +27,15 @@ class HorseEncoder():
 
     def transform(self, df):
         np_encoded_T = self.encoder.transform(df.select(HorseEncoder.STR_COLUMNS).to_numpy()).T
-        return (
+        
+        # race_dateにnullが含まれているか確認
+        if df.filter(pl.col("race_date").is_null()).height > 0:
+            print("race_dateにnull値が含まれています。")
+            import pdb; pdb.set_trace()
+
+        transformed_df = (
             df.lazy()
-            .with_columns([
+            .with_columns(
                 pl.col("race_id").cast(pl.Float64),
                 pl.col("horse_id").cast(pl.Float64),
                 pl.col("jockey_id").cast(pl.Float64),
@@ -48,8 +54,8 @@ class HorseEncoder():
                 (pl.col("penalty") / pl.col("weight")).alias("penaltywgt"),
                 (pl.col("odds") / pl.col("result")).alias("oddsrslt"),
                 *[pl.Series(col, values) for col, values in zip(HorseEncoder.STR_COLUMNS, np_encoded_T)],
-            ])
-            .with_columns([
+            )
+            .with_columns(
                 encode_cos(pl.col("race_date").dt.ordinal_day(), max=365).alias("cos_racedate"),
                 encode_cos((pl.col("start_time") - HorseEncoder.start_of_day).dt.total_seconds(), max=86400).alias("cos_starttime"),
                 (pl.col("time") - pl.col("time").min().over("race_id")).alias("margin"),
@@ -57,10 +63,17 @@ class HorseEncoder():
                 pl.col("corners").list.reverse().list.get(1, null_on_oob=True).cast(pl.Float64).alias("corner3"),
                 pl.col("corners").list.reverse().list.get(2, null_on_oob=True).cast(pl.Float64).alias("corner2"),
                 pl.col("corners").list.reverse().list.get(3, null_on_oob=True).cast(pl.Float64).alias("corner1"),
-            ])
+            )
             .select(pl.exclude("corners"))
             .collect()
         )
+
+        # 変換後のrace_dateにnullが含まれているか確認
+        if transformed_df.filter(pl.col("race_date").is_null()).height > 0:
+            print("変換後のrace_dateにnull値が含まれています。")
+            import pdb; pdb.set_trace()
+
+        return transformed_df
 
     def fit_transform(self, df):
         return self.fit(df).transform(df)
@@ -79,8 +92,8 @@ def encode_racedate():
         pl.format(
             "{}-{}-{}",
             pl.col("year"),
-            pl.col("race_date").str.extract(r'(\d+)月'),
-            pl.col("race_date").str.extract(r'(\d+)日')
+            pl.col("race_date").str.extract_all(r'(\d{1,2})').list.get(0).alias("month"),
+            pl.col("race_date").str.extract_all(r'(\d{1,2})').list.get(1).alias("day")
         )
         .str.to_date()
     )

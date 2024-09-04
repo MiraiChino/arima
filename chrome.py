@@ -27,6 +27,9 @@ class ChromeDriver(webdriver.Chrome):
         service = Service(ChromeDriverManager().install())
         super().__init__(service=service, options=options)
 
+        # ChromeDriverのバージョンを表示
+        print(f"ChromeDriver version: {self.capabilities['chrome']['chromedriverVersion'].split(' ')[0]}")
+
     def wait_all_elements(self):
         return self.wait.until(
             EC.presence_of_all_elements_located

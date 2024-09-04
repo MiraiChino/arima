@@ -1,6 +1,7 @@
 import re
 import time
 import traceback
+import argparse
 from functools import wraps
 from pathlib import Path
 
@@ -261,15 +262,23 @@ def scrape_sanrenpuku_generator(driver, race_id):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Netkeiba Scraper")
+    parser.add_argument("--dry-run", action="store_true", help="Run the script without making any file changes")
+    args = parser.parse_args()
+
     last_updated = sorted(Path("netkeiba").iterdir(), key=lambda p: p.stat().st_mtime)[-1]
     if ".DS_Store" in last_updated.stem:
         last_updated = sorted(Path("netkeiba").iterdir(), key=lambda p: p.stat().st_mtime)[-2]
     if match := netkeiba_date.match(last_updated.stem):
         year, month = match.groups()
-        Path(f"netkeiba/netkeiba{year}-{month}.races.feather").unlink(missing_ok=True)
-        print(f"remove netkeiba/netkeiba{year}-{month}.races.feather")
-        Path(f"netkeiba/netkeiba{year}-{month}.horses.feather").unlink(missing_ok=True)
-        print(f"remove netkeiba/netkeiba{year}-{month}.horses.feather")
+        if not args.dry_run:
+            Path(f"netkeiba/netkeiba{year}-{month}.races.feather").unlink(missing_ok=True)
+            print(f"remove netkeiba/netkeiba{year}-{month}.races.feather")
+            Path(f"netkeiba/netkeiba{year}-{month}.horses.feather").unlink(missing_ok=True)
+            print(f"remove netkeiba/netkeiba{year}-{month}.horses.feather")
+        else:
+            print(f"dry-run: would remove netkeiba/netkeiba{year}-{month}.races.feather")
+            print(f"dry-run: would remove netkeiba/netkeiba{year}-{month}.horses.feather")
 
     with chrome.driver() as driver:
         for year, month in utils.daterange(config.from_date, config.to_date):
@@ -293,13 +302,19 @@ if __name__ == "__main__":
             try:
                 race_df = pd.DataFrame(races, columns=RACE_AFTER_COLUMNS)
                 race_df = pl.from_pandas(race_df)
-                race_df.write_ipc(race_file)
-                print(f"saved: {year}-{month} races -> {race_file}")
+                if not args.dry_run:
+                    race_df.write_ipc(race_file)
+                    print(f"saved: {year}-{month} races -> {race_file}")
+                else:
+                    print(f"dry-run: would save {year}-{month} races -> {race_file}")
 
                 horse_df = pd.DataFrame(horses, columns=HORSE_COLUMNS)
                 horse_df = pl.from_pandas(horse_df)
-                horse_df.write_ipc(horse_file)
-                print(f"saved: {year}-{month} horses -> {horse_file}")
+                if not args.dry_run:
+                    horse_df.write_ipc(horse_file)
+                    print(f"saved: {year}-{month} horses -> {horse_file}")
+                else:
+                    print(f"dry-run: would save {year}-{month} horses -> {horse_file}")
 
             except Exception as e:
                 print(e)
@@ -323,4 +338,7 @@ if __name__ == "__main__":
     ldf_races = pl.concat(race_chunks)
     ldf_horses = pl.concat(horse_chunks)
     df = ldf_horses.join(ldf_races, on='race_id', how='left').collect()
-    df.write_ipc(config.netkeiba_file)
+    if not args.dry_run:
+        df.write_ipc(config.netkeiba_file)
+    else:
+        print(f"dry-run: would save final dataframe to {config.netkeiba_file}")

@@ -35,6 +35,10 @@ def same_ave(*same_columns, target="prize"):
 
 def interval_prize(history, now, index):
     interval = (now[index("race_date")] - history[:, index("race_date")]).astype("timedelta64[D]").mean() / np.timedelta64(1, 'D')
+    if interval == 0:
+        print(now[index("race_date")])
+        print(history[:, index("race_date")])
+        interval = 1
     prize = history[:, index("prize")].mean()
     return prize / interval
 

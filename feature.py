@@ -217,7 +217,7 @@ def save_feat(player, feat_pattern, hist_pattern, df):
             pl.col([pl.Int8, pl.Int16, pl.Int32, pl.Int64]).cast(pl.Float64),
         )
     )
-    # df_feat.write_ipc(f'feat/{player}_{name}.feather')
+    df_feat.write_ipc(f'feat/{player}_{name}.feather')
 
 def search_history(target_row, hist_pattern, feat_pattern, df):
     """

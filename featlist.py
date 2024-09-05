@@ -1,4 +1,5 @@
 import numpy as np
+from datetime import datetime
 
 def ave(column):
     def wrapper(history, now, index):
@@ -34,11 +35,16 @@ def same_ave(*same_columns, target="prize"):
     return wrapper
 
 def interval_prize(history, now, index):
-    interval = (now[index("race_date")] - history[:, index("race_date")]).astype("timedelta64[D]").mean() / np.timedelta64(1, 'D')
+    race_date_now = now[index("race_date")]
+    race_date_mean = history[:, index("race_date")]
+    if isinstance(race_date_now, str):
+        race_date_now = datetime.strptime(race_date_now, "%Y-%m-%d")
+    try:
+        interval = (race_date_now - race_date_mean).astype("timedelta64[D]").mean() / np.timedelta64(1, 'D')
+    except:
+        import pdb; pdb.set_trace()
     if interval == 0:
-        print(now[index("race_date")])
-        print(history[:, index("race_date")])
-        interval = 1
+        return None
     prize = history[:, index("prize")].mean()
     return prize / interval
 

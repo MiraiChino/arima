@@ -5,4 +5,4 @@ services:
       context: .
       dockerfile: Dockerfile
       target: deploy
-    image: lambda_arima
+    image: lambda_arima:latest

@@ -5,7 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: dev
-    image: arima:dev
+    image: lambda_arima:dev
     ports:
       - 8080:8080
     volumes:

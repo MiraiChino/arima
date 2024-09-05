@@ -2,12 +2,13 @@ addict==2.4.0
 beautifulsoup4==4.12.3
 catboost==1.2.5
 dill==0.3.8
+domonic==0.9.12
 fastapi==0.112.2
 lightgbm==4.5.0
 loguru==0.7.2
 polars==1.6.0
 pyarrow==17.0.0
-requests==2.32.3
+requests==2.31.0
 scikit-learn==1.5.1
 selenium==4.24.0
 sse-starlette==2.1.3

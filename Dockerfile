@@ -32,7 +32,6 @@ COPY . ${WORKDIR}
 FROM slim as deploy
 
 COPY --from=build ${WORKDIR} ${WORKDIR}
-COPY --from=build ${WORKDIR}/chromedriver ${WORKDIR}/chromedriver
 COPY --from=build /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 
 CMD ["python", "app.py"]

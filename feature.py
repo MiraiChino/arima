@@ -1,9 +1,11 @@
 import argparse
 import functools
+import pdb
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
-from pathlib import Path
 from functools import lru_cache
+from pathlib import Path
 
 import dill as pickle
 import numpy as np
@@ -11,8 +13,6 @@ import pandas as pd
 import polars as pl
 from tqdm import tqdm
 from trueskill import TrueSkill
-from concurrent.futures import ThreadPoolExecutor
-import pdb
 
 import config
 import featlist
@@ -28,6 +28,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--prepare', action='store_true')
     parser.add_argument('--out', action='store_true')
+    parser.add_argument('--dry-run', action='store_true', help='Run the script without making any file changes')
     return parser.parse_args()
 
 @lru_cache(maxsize=None)
@@ -176,7 +177,7 @@ def agg_history(f_pattern, hist_pattern, history, index):
     
     return np.array(results)
 
-def save_feat(player, feat_pattern, hist_pattern, df):
+def save_feat(player, feat_pattern, hist_pattern, df, dry_run=False):
     """
     特徴量を保存します。
 
@@ -185,6 +186,7 @@ def save_feat(player, feat_pattern, hist_pattern, df):
         feat_pattern (dict): 特徴量パターン。
         hist_pattern (list): 履歴パターン。
         df (DataFrame): データフレーム。
+        dry_run (bool): ファイルの追加・削除を実行しないモード。
     """
     name = df[0, player]
     try:
@@ -217,7 +219,10 @@ def save_feat(player, feat_pattern, hist_pattern, df):
             pl.col([pl.Int8, pl.Int16, pl.Int32, pl.Int64]).cast(pl.Float64),
         )
     )
-    df_feat.write_ipc(f'feat/{player}_{name}.feather')
+    if not dry_run:
+        df_feat.write_ipc(f'feat/{player}_{name}.feather')
+    else:
+        print(f"dry-run: would save feat/{player}_{name}.feather")
 
 def search_history(target_row, hist_pattern, feat_pattern, df):
     """
@@ -361,9 +366,12 @@ def calc(f, past_j, row, index, nan):
         pdb.set_trace()
     return nan
 
-def prepare():
+def prepare(dry_run=False):
     """
     データを読み込み、エンコードし、評価を行います。
+
+    Args:
+        dry_run (bool): ファイルの追加・削除を実行しないモード。
     """
     print(f'loading {config.netkeiba_file}')
     try:
@@ -375,17 +383,25 @@ def prepare():
     print('encoding')
     horse_encoder = HorseEncoder()
     df_encoded = horse_encoder.format_fit_transform(df_original)
-    try:
-        with open(config.encoder_file, 'wb') as f:
-            pickle.dump(horse_encoder, f)
-    except Exception as e:
-        print(f"Error saving encoder: {e}")
-        pdb.set_trace()
+    if not dry_run:
+        try:
+            with open(config.encoder_file, 'wb') as f:
+                pickle.dump(horse_encoder, f)
+        except Exception as e:
+            print(f"Error saving encoder: {e}")
+            pdb.set_trace()
+    else:
+        print(f"dry-run: would save encoder to {config.encoder_file}")
+
     df_avetime = (
         df_encoded.group_by(['field', 'distance', 'field_condition'])
         .agg(pl.mean('time').alias('avetime'))
     )
-    df_avetime.write_ipc(config.avetime_file)
+    if not dry_run:
+        df_avetime.write_ipc(config.avetime_file)
+    else:
+        print(f"dry-run: would save avetime to {config.avetime_file}")
+
     df_encoded = df_encoded.join(
         df_avetime,
         on=['field', 'distance', 'field_condition'],
@@ -399,7 +415,10 @@ def prepare():
         df_ratings = pl.read_ipc(config.rating_file)
     else:
         df_ratings = rate_all(df_encoded)
-        df_ratings.write_ipc(config.rating_file)
+        if not dry_run:
+            df_ratings.write_ipc(config.rating_file)
+        else:
+            print(f"dry-run: would save ratings to {config.rating_file}")
     
     df_encoded = pl.concat([df_encoded, df_ratings], how='horizontal')
     hist_pattern = featlist.hist_pattern
@@ -425,7 +444,7 @@ def prepare():
     try:
         for player in players:
             n_players = df_encoded.n_unique(player)
-        save_player_feat = functools.partial(save_feat, player, feat_pattern, hist_pattern)
+        save_player_feat = functools.partial(save_feat, player, feat_pattern, hist_pattern, dry_run=dry_run)
 
         for name, df in tqdm(df_encoded.group_by(player), desc=f'feat {player}', total=n_players):
             new_horses = []
@@ -440,9 +459,12 @@ def prepare():
         print(f"Error in prepare: {traceback.format_exc()}")
         pdb.set_trace()
 
-def out():
+def out(dry_run=False):
     """
     特徴量を結合し、最終的なデータセットを保存します。
+
+    Args:
+        dry_run (bool): ファイルの追加・削除を実行しないモード。
     """
     feat_pattern = featlist.feature_pattern
     cols = list(feat_pattern.keys())
@@ -484,7 +506,10 @@ def out():
         )
     )
     try:
-        df.write_ipc(config.feat_file)
+        if not dry_run:
+            df.write_ipc(config.feat_file)
+        else:
+            print(f"dry-run: would save final dataframe to {config.feat_file}")
     except Exception as e:
         print(f"Error saving file: {e}")
         pdb.set_trace()
@@ -492,6 +517,6 @@ def out():
 if __name__ == '__main__':
     args = parse_args()
     if args.prepare:
-        prepare()
+        prepare(dry_run=args.dry_run)
     if args.out:
-        out()
+        out(dry_run=args.dry_run)

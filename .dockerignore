@@ -1,25 +1,17 @@
-# Byte-compiled / optimized / DLL files
-__pycache__
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# Environments
-venv
-
 .DS_Store
+.dockerignore
 .git
 .gitignore
-README.md
-train.py
-arima.ipynb
+.ipynb_checkpoints
 Dockerfile
-docker-compose.yml
-docker-compose.deploy.yml
-netkeiba
-feat
-temp
+README.md
+__pycache__
 catboost_info
-train.log
-netkeiba.log
+docker-compose.deploy.yml
+docker-compose.yml
+feat
+netkeiba
+temp
+train.py
 update.sh
+venv

@@ -12,11 +12,9 @@ import numpy as np
 import pandas as pd
 import polars as pl
 from tqdm import tqdm
-from trueskill import TrueSkill
 
 import config
 import featlist
-from encoder import HorseEncoder
 
 def parse_args():
     """
@@ -189,10 +187,11 @@ def save_feat(player, feat_pattern, hist_pattern, df, dry_run=False):
         dry_run (bool): ファイルの追加・削除を実行しないモード。
     """
     name = df[0, player]
-    try:
-        name = int(name)
-    except ValueError:
+
+    if name is None:
         return
+    elif isinstance(name, float):
+        name = int(name)
 
     f_pattern = feat_pattern[player]
     try:
@@ -284,6 +283,7 @@ def rate_all(df):
     Returns:
         DataFrame: 更新されたレーティングを含むデータフレーム。
     """
+    from trueskill import TrueSkill
     env = TrueSkill(draw_probability=0.000001)
     try:
         df_use = (
@@ -379,6 +379,7 @@ def prepare(dry_run=False):
         pdb.set_trace()
 
     print('encoding')
+    from encoder import HorseEncoder
     horse_encoder = HorseEncoder()
     df_encoded = horse_encoder.format_fit_transform(df_original)
     if not dry_run:

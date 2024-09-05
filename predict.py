@@ -8,7 +8,6 @@ import dill as pickle
 import numpy as np
 import pandas as pd
 import polars as pl
-from sklearn.preprocessing import scale
 
 import chrome
 import config
@@ -31,13 +30,21 @@ class Baken:
     df: pd.DataFrame = pd.DataFrame()
     df2: pd.DataFrame = pd.DataFrame()
 
+def standardize(x):
+    """標準化関数：平均0、標準偏差1に変換"""
+    mean = np.mean(x)
+    std = np.std(x)
+    return (x - mean) / std
+
 def softmax(x):
+    """ソフトマックス関数"""
     c = np.max(x)
     exp_x = np.exp(x - c)
     return exp_x / np.sum(exp_x)
 
 def probability(x):
-    return softmax(scale(x))
+    """標準化された入力に対してソフトマックスを計算"""
+    return softmax(standardize(x))
 
 def p1(no1_index, probs):
     return probs[no1_index]

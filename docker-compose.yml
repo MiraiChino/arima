@@ -2,9 +2,10 @@ version: "3.9"
 services:
   arima:
     build:
-        context: .
-        dockerfile: Dockerfile
-        target: dev
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    image: arima:dev
     ports:
       - 8080:8080
     volumes:

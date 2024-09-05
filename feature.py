@@ -221,8 +221,6 @@ def save_feat(player, feat_pattern, hist_pattern, df, dry_run=False):
     )
     if not dry_run:
         df_feat.write_ipc(f'feat/{player}_{name}.feather')
-    else:
-        print(f"dry-run: would save feat/{player}_{name}.feather")
 
 def search_history(target_row, hist_pattern, feat_pattern, df):
     """

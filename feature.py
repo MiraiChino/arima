@@ -443,17 +443,17 @@ def prepare(dry_run=False):
     try:
         for player in players:
             n_players = df_encoded.n_unique(player)
-        save_player_feat = functools.partial(save_feat, player, feat_pattern, hist_pattern, dry_run=dry_run)
+            save_player_feat = functools.partial(save_feat, player, feat_pattern, hist_pattern, dry_run=dry_run)
 
-        for name, df in tqdm(df_encoded.group_by(player), desc=f'feat {player}', total=n_players):
-            new_horses = []
-            for row in df.iter_rows(named=True):
-                horse_id = row['horse_id']
-                race_date = row['race_date']
-                if horse_id not in existing_horse_latest_race[player] or (race_date and race_date > existing_horse_latest_race[player].get(horse_id)):
-                    new_horses.append(horse_id)
-            if new_horses:
-                save_player_feat(df.filter(pl.col('horse_id').is_in(new_horses)))
+            for name, df in tqdm(df_encoded.group_by(player), desc=f'feat {player}', total=n_players):
+                new_horses = []
+                for row in df.iter_rows(named=True):
+                    horse_id = row['horse_id']
+                    race_date = row['race_date']
+                    if horse_id not in existing_horse_latest_race[player] or (race_date and race_date > existing_horse_latest_race[player].get(horse_id)):
+                        new_horses.append(horse_id)
+                if new_horses:
+                    save_player_feat(df.filter(pl.col('horse_id').is_in(new_horses)))
     except Exception as e:
         print(f"Error in prepare: {traceback.format_exc()}")
         pdb.set_trace()

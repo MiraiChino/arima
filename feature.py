@@ -423,19 +423,19 @@ def prepare(dry_run=False):
     players = list(feat_pattern.keys())
 
     # 過去のレース日を追跡
-    existing_horse_latest_race = {}
+    existing_latest_race = {}
     for player in players:
-        existing_horse_latest_race[player] = {}
+        existing_latest_race[player] = {}
         feat_files = list(Path('feat').glob(f'{player}_*.feather'))
         for feat_file in tqdm(feat_files, desc=f'Loading {player}', total=len(feat_files)):
             existing_feats = pl.read_ipc(feat_file)
             for row in existing_feats.iter_rows(named=True):
-                horse_id = row['horse_id']
+                player_id = row[player]
                 race_date = row['race_date']
-                if horse_id not in existing_horse_latest_race[player]:
-                    existing_horse_latest_race[player][horse_id] = race_date
+                if player_id not in existing_latest_race[player]:
+                    existing_latest_race[player][player_id] = race_date
                 else:
-                    existing_horse_latest_race[player][horse_id] = max(existing_horse_latest_race[player][horse_id], race_date)
+                    existing_latest_race[player][player_id] = max(existing_latest_race[player][player_id], race_date)
 
     # 最新のレースに出た馬、騎手、調教師の特徴量を計算
     try:
@@ -444,14 +444,14 @@ def prepare(dry_run=False):
             save_player_feat = functools.partial(save_feat, player, feat_pattern, hist_pattern, dry_run=dry_run)
 
             for name, df in tqdm(df_encoded.group_by(player), desc=f'feat {player}', total=n_players):
-                new_horses = []
+                new_players = []
                 for row in df.iter_rows(named=True):
-                    horse_id = row['horse_id']
+                    player_id = row[player]
                     race_date = row['race_date']
-                    if horse_id not in existing_horse_latest_race[player] or (race_date and race_date > existing_horse_latest_race[player].get(horse_id)):
-                        new_horses.append(horse_id)
-                if new_horses:
-                    save_player_feat(df.filter(pl.col('horse_id').is_in(new_horses)))
+                    if player_id not in existing_latest_race[player] or (race_date and race_date > existing_latest_race[player].get(player_id)):
+                        new_players.append(player_id)
+                if new_players:
+                    save_player_feat(df.filter(pl.col(player).is_in(new_players)))
     except Exception as e:
         print(f"Error in prepare: {traceback.format_exc()}")
         pdb.set_trace()

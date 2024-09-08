@@ -2,8 +2,8 @@ today=`date '+%Y%m%d'`
 echo $today
 echo python netkeiba.py
 python netkeiba.py
-echo python feature.py --prepare
-python feature.py --prepare
+echo python feature.py
+python feature.py
 echo python train.py | tee temp/train_$today.log
 python train.py | tee temp/train_$today.log
 echo docker compose -f docker-compose.deploy.yml build

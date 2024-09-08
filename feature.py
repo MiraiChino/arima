@@ -24,8 +24,6 @@ def parse_args():
         Namespace: 解析された引数を含むオブジェクト。
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('--prepare', action='store_true')
-    parser.add_argument('--out', action='store_true')
     parser.add_argument('--dry-run', action='store_true', help='Run the script without making any file changes')
     return parser.parse_args()
 
@@ -515,7 +513,5 @@ def out(dry_run=False):
 
 if __name__ == '__main__':
     args = parse_args()
-    if args.prepare:
-        prepare(dry_run=args.dry_run)
-    if args.out:
-        out(dry_run=args.dry_run)
+    prepare(dry_run=args.dry_run)
+    out(dry_run=args.dry_run)

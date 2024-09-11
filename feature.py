@@ -2,7 +2,7 @@ import argparse
 import functools
 import pdb
 import traceback
-from concurrent.futures import ThreadPoolExecutor
+from collections import Counter
 from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -69,109 +69,94 @@ def latest_newr(player, target_row, index, df):
         pdb.set_trace()
     return get_player_newr(df, player, id)
 
-def pre_aggregate_history(history, index, f_byrace, f_bymonth, hist_pattern, mo=timedelta(days=30)):
+
+def agg_history_i(i, f_byrace, f_bymonth, hist_pattern, history, index, mo=timedelta(days=30), cache=None):
     """
-    履歴データを事前に集約します。
+    特定のインデックスに基づいて履歴データを集約します。
 
     Args:
+        i (int): 集約対象のインデックス。
+        f_byrace (list): レースごとの集約関数のリスト。
+        f_bymonth (list): 月ごとの集約関数のリスト。
+        hist_pattern (dict): 履歴パターンの辞書。
         history (array): 履歴データ。
         index (function): 列名をインデックスに変換する関数。
-        f_byrace (list): レースごとの関数リスト。
-        f_bymonth (list): 月ごとの関数リスト。
-        hist_pattern (list): 履歴パターン。
-        mo (timedelta): 月の期間。
+        mo (timedelta): 月の期間（デフォルトは30日）。
+        cache (dict, optional): 計算結果をキャッシュするための辞書。
 
     Returns:
-        dict: 事前に集約されたデータ。
+        array: 集約された履歴データ。
     """
-    aggregated_history = {}
+    if cache is None:
+        cache = {}
+    no_hist = np.empty(((len(f_byrace) + len(f_bymonth)) * len(hist_pattern),))
+    no_hist[:] = np.nan
+    row = history[i, :]
     hist_race = history[:, index('race_date')]
-    
-    if len(history) == 0:
-        return {}
-    
-    for i, row in enumerate(history):
-        now_race = row[index('race_date')]
-        past_hist = history[:i+1][::-1]
-        
-        last_jrace_fresult = np.concatenate([
-            [f(past_hist[:1+j, :], row, index) for j in hist_pattern]
-            for f in f_byrace
-        ])
-        
+    now_race = row[index('race_date')]
+    past_days = now_race - hist_race
+    past_hist = history[np.where(hist_race < now_race)][::-1]
+    zero_m = timedelta(days=0)
+    if past_hist.any():
         try:
-            last_jmonth_fresult = np.concatenate([
-                [calc(
-                    f,
-                    past_hist[(timedelta(days=0) < (now_race - hist_race[:i+1])) & ((now_race - hist_race[:i+1]) <= j*mo)],
-                    row,
-                    index,
-                    np.nan,
-                ) for j in hist_pattern]
-                for f in f_bymonth
-            ])
+            last_jrace_fresult = []
+            for f in f_byrace:
+                for j in hist_pattern:
+                    key = (f.__name__, j, tuple(row))
+                    if key not in cache:
+                        cache[key] = f(past_hist[:1+j, :], row, index)
+                    last_jrace_fresult.append(cache[key])
+
+            last_jmonth_fresult = []
+            for f in f_bymonth:
+                for j in hist_pattern:
+                    key = (f.__name__, j, tuple(row))
+                    if key not in cache:
+                        cache[key] = calc(
+                            f,
+                            past_hist[np.where((zero_m < past_days) & (past_days <= j*mo))],
+                            row,
+                            index,
+                            np.nan,
+                        )
+                    last_jmonth_fresult.append(cache[key])
+
+            return np.array(last_jrace_fresult + last_jmonth_fresult)
         except Exception as e:
-            print(f"Error in pre_aggregate_history: {e}")
-            pdb.set_trace()
-        
-        aggregated_history[i] = np.concatenate([last_jrace_fresult, last_jmonth_fresult])
-    
-    return aggregated_history
+            print(traceback.format_exc())
+            import pdb; pdb.set_trace()
+            return no_hist
+    else:
+        return no_hist
 
-def efficient_agg_history_i(i, f_byrace, f_bymonth, hist_pattern, history, index, mo=timedelta(days=30), aggregated_history=None):
+def agg_history(f_byrace, f_bymonth, hist_pattern, history, index):
     """
-    履歴データを効率的に集約します。
+    履歴データを集約し、特徴量を計算します。
 
     Args:
-        i (int): インデックス。
-        f_byrace (list): レースごとの関数リスト。
-        f_bymonth (list): 月ごとの関数リスト。
-        hist_pattern (list): 履歴パターン。
-        history (array): 履歴データ。
-        index (function): 列名をインデックスに変換する関数。
-        mo (timedelta): 月の期間。
-        aggregated_history (dict): 事前に集約されたデータ。
-
-    Returns:
-        array: 集約結果。
-    """
-    if aggregated_history is None:
-        aggregated_history = pre_aggregate_history(history, index, f_byrace, f_bymonth, hist_pattern, mo)
-    
-    return aggregated_history[i]
-
-def agg_history(f_pattern, hist_pattern, history, index):
-    """
-    履歴データを集約します。
-
-    Args:
-        f_pattern (dict): 特徴量パターン。
-        hist_pattern (list): 履歴パターン。
+        f_byrace (list): レースごとの集約関数のリスト。
+        f_bymonth (list): 月ごとの集約関数のリスト。
+        hist_pattern (dict): 履歴パターンの辞書。
         history (array): 履歴データ。
         index (function): 列名をインデックスに変換する関数。
 
     Returns:
-        array: 集約結果。
+        array: 集約された履歴データの配列。
     """
-    f_byrace = list(f_pattern['by_race'].values())
-    f_bymonth = list(f_pattern['by_month'].values())
-    aggregated_history = pre_aggregate_history(history, index, f_byrace, f_bymonth, hist_pattern)
-    
-    with ThreadPoolExecutor() as executor:
-        results = list(executor.map(
-            lambda i: efficient_agg_history_i(
-                i=i,
-                f_byrace=f_byrace,
-                f_bymonth=f_bymonth,
-                hist_pattern=hist_pattern,
-                history=history,
-                index=index,
-                aggregated_history=aggregated_history
-            ),
-            range(len(history))
-        ))
-    
-    return np.array(results)
+    result = []
+    cache = {}  # キャッシュを初期化
+    for i in range(0, len(history)):
+        history_i = agg_history_i(
+            i=i,
+            f_byrace=f_byrace,
+            f_bymonth=f_bymonth,
+            hist_pattern=hist_pattern,
+            history=history,
+            index=index,
+            cache=cache  # キャッシュを渡す
+        )
+        result.append(history_i)
+    return np.array(result)
 
 def save_feat(player, feat_pattern, hist_pattern, df, dry_run=False):
     """
@@ -204,8 +189,9 @@ def save_feat(player, feat_pattern, hist_pattern, df, dry_run=False):
         pdb.set_trace()
     columns = df.columns
     index = lambda x: columns.index(x)
-    a_agghist = agg_history(f_pattern, hist_pattern, hist, index)
-
+    f_byrace = list(f_pattern['by_race'].values())
+    f_bymonth = list(f_pattern['by_month'].values())
+    a_agghist = agg_history(f_byrace, f_bymonth, hist_pattern, hist, index)
     all_hist = np.column_stack((hist, a_agghist))
     funcs = list(f_pattern['by_race'].keys()) + list(f_pattern['by_month'].keys())
     past_columns = [f"{col}_{x}" for col in funcs for x in hist_pattern]
@@ -259,7 +245,7 @@ def search_history(target_row, hist_pattern, feat_pattern, df):
             row = target_row + hist_target.select('^.*newr$').row(-1)
             nphist_target = hist_target.select(pl.exclude('^.*newr$')).to_numpy()
             nphist_target = np.append(nphist_target, [row], axis=0)
-            feat = efficient_agg_history_i(
+            feat = agg_history_i(
                 i=len(nphist_target)-1,
                 f_byrace=list(f_pattern['by_race'].values()),
                 f_bymonth=list(f_pattern['by_month'].values()),
@@ -279,7 +265,7 @@ def rate_all(df):
         df (DataFrame): 評価対象のデータフレーム。
 
     Returns:
-        DataFrame: 更新されたレーティングを含むデータフレーム。
+        DataFrame: 更されたレーティングを含むデータフレーム。
     """
     from trueskill import TrueSkill
     env = TrueSkill(draw_probability=0.000001)
@@ -362,6 +348,84 @@ def calc(f, past_j, row, index, nan):
         pdb.set_trace()
     return nan
 
+def calculate_corner_groups(df):
+    df = df.with_columns(
+            pl.col("race_id").count().over("race_id").alias("num_horses")
+        ).with_columns(
+            (
+                pl.when(pl.col(corner) <= (pl.col("num_horses") / 3)).then(1)
+                .when(pl.col(corner) <= (pl.col("num_horses") * 2 / 3)).then(2)
+                .otherwise(3).alias(f"{corner}_group")
+            )
+            for corner in ["corner1", "corner2", "corner3", "corner4"]
+        )
+    return df
+
+def is_nige(): # 1
+    return (pl.col("corner2") == 1).or_(pl.col("corner3") == 1).or_(pl.col("corner4") == 1)
+
+def is_senko(): # 2
+    return (pl.col("corner4_group") == 1)
+
+def is_sashi(): # 3
+    return (pl.col("corner4_group") == 2).and_(pl.col("result") <= 4)
+
+def is_chudan(): # 4
+    return (pl.col("corner4_group") == 2)
+
+def is_oikomi(): # 5
+    return (pl.col("corner4_group") == 3).and_(pl.col("result") <= 4)
+
+def is_kouho(): # 6
+    return (pl.col("corner4_group") == 3)
+
+def is_makuri(): # 7
+    return ((pl.col("corner2_group") == 3).or_(pl.col("corner3_group") == 3)).and_(pl.col("corner4_group") == 1)
+
+def tolist(elements):
+    return [elements[:i].to_list() for i in range(1, len(elements)+1)]
+
+def mode(lst):
+    past_list = lst[:-1]
+    if past_list.is_empty():
+        return -1
+    else:
+        return Counter(past_list).most_common(1)[0][0]
+
+def running_style(df):
+    df_running_style =  (
+        df
+        .group_by("horse_id")
+        .agg(
+            pl.col("race_id"),
+            pl.col("running").map_elements(tolist, return_dtype=pl.List(pl.List(pl.Int64))).alias("running_list")
+        )
+        .explode("running_list", "race_id")
+        .select(
+            pl.col("horse_id"),
+            pl.col("race_id"),
+            pl.col("running_list").map_elements(mode, return_dtype=pl.Int64).alias("running_style")
+        )
+    )
+    return df.join(df_running_style, on=["horse_id", "race_id"], how="left")
+
+def add_running_style_features(df):
+    df = calculate_corner_groups(df)
+    df = df.with_columns(
+        pl.when(is_nige()).then(1)
+        .when(is_senko()).then(2)
+        .when(is_sashi()).then(3)
+        .when(is_chudan()).then(4)
+        .when(is_oikomi()).then(5)
+        .when(is_kouho()).then(6)
+        .when(is_makuri()).then(7)
+        .otherwise(-1).alias("running")
+    )
+
+    # レース時点での過去の脚質最頻値を計算
+    df = running_style(df)
+    return df
+
 def prepare(dry_run=False):
     """
     データを読み込み、エンコードし、評価を行います。
@@ -390,6 +454,12 @@ def prepare(dry_run=False):
     else:
         print(f"dry-run: would save encoder to {config.encoder_file}")
 
+    # 脚質の特徴量を追加
+    print('running_style')
+    df_encoded = add_running_style_features(df_encoded)
+
+    # avetime
+    print('avetime')
     df_avetime = (
         df_encoded.group_by(['field', 'distance', 'field_condition'])
         .agg(pl.mean('time').alias('avetime'))
@@ -398,10 +468,26 @@ def prepare(dry_run=False):
         df_avetime.write_ipc(config.avetime_file)
     else:
         print(f"dry-run: would save avetime to {config.avetime_file}")
-
     df_encoded = df_encoded.join(
         df_avetime,
         on=['field', 'distance', 'field_condition'],
+        how='left',
+    )
+
+    # aversrize
+    print('aversrize')
+    df_aversrize = (
+        df_encoded.group_by(['running_style', 'field', 'distance', 'field_condition', 'place_code', 'gate', 'turn'])
+        .agg(pl.mean('prize').alias('aversrize'))
+    )
+
+    if not dry_run:
+        df_aversrize.write_ipc(config.aversrize_file)
+    else:
+        print(f"dry-run: would save aversrize to {config.aversrize_file}")
+    df_encoded = df_encoded.join(
+        df_aversrize,
+        on=['running_style', 'field', 'distance', 'field_condition', 'place_code', 'gate', 'turn'],
         how='left',
     )
 
@@ -418,6 +504,7 @@ def prepare(dry_run=False):
             print(f"dry-run: would save ratings to {config.rating_file}")
     
     df_encoded = pl.concat([df_encoded, df_ratings], how='horizontal')
+
     hist_pattern = featlist.hist_pattern
     feat_pattern = featlist.feature_pattern
     players = list(feat_pattern.keys())

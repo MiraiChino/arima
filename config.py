@@ -2,7 +2,7 @@ from addict import Dict
 
 # scraping
 from_date = '2008-01'
-to_date = '2022-12'
+to_date = '2024-08'
 netkeiba_horse_file = f'temp/netkeiba{from_date}_{to_date}.horses.feather'
 netkeiba_race_file = f'temp/netkeiba{from_date}_{to_date}.races.feather'
 netkeiba_file = f'temp/netkeiba{from_date}_{to_date}.feather'
@@ -10,6 +10,7 @@ netkeiba_file = f'temp/netkeiba{from_date}_{to_date}.feather'
 # feature extraction
 encoder_file = f'encoder{from_date}_{to_date}.pickle'
 avetime_file = f'avetime{from_date}_{to_date}.feather'
+aversrize_file = f'aversrize{from_date}_{to_date}.feather'
 rating_file = f'temp/rating{from_date}_{to_date}.feather'
 feat_file = f'feature{from_date}_{to_date}.feather'
 

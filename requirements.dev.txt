@@ -6,6 +6,7 @@ domonic==0.9.12
 fastapi==0.112.2
 lightgbm==4.5.0
 loguru==0.7.2
+numpy<2
 polars==1.6.0
 pyarrow==17.0.0
 requests==2.31.0

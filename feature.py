@@ -171,10 +171,12 @@ def save_feat(player, feat_pattern, hist_pattern, df, dry_run=False):
     """
     name = df[0, player]
 
-    if name is None:
-        return
-    elif isinstance(name, float):
+    try:
         name = int(name)
+    except Exception:
+        print(f"Error converting {name} to int")
+        print(traceback.format_exc())
+        return
 
     f_pattern = feat_pattern[player]
     try:
@@ -192,16 +194,20 @@ def save_feat(player, feat_pattern, hist_pattern, df, dry_run=False):
     f_byrace = list(f_pattern['by_race'].values())
     f_bymonth = list(f_pattern['by_month'].values())
     a_agghist = agg_history(f_byrace, f_bymonth, hist_pattern, hist, index)
-    all_hist = np.column_stack((hist, a_agghist))
-    funcs = list(f_pattern['by_race'].keys()) + list(f_pattern['by_month'].keys())
-    past_columns = [f"{col}_{x}" for col in funcs for x in hist_pattern]
-    df_feat = pd.DataFrame(all_hist, columns=columns+past_columns)
-    df_feat = (
-        pl.from_pandas(df_feat)
-        .with_columns(
-            pl.col([pl.Int8, pl.Int16, pl.Int32, pl.Int64]).cast(pl.Float64),
+    try:
+        all_hist = np.column_stack((hist, a_agghist))
+        funcs = list(f_pattern['by_race'].keys()) + list(f_pattern['by_month'].keys())
+        past_columns = [f"{col}_{x}" for col in funcs for x in hist_pattern]
+        df_feat = pd.DataFrame(all_hist, columns=columns+past_columns)
+        df_feat = (
+            pl.from_pandas(df_feat)
+            .with_columns(
+                pl.col(pl.Int8, pl.Int16, pl.Int32, pl.Int64, pl.Null).cast(pl.Float64),
+            )
         )
-    )
+    except Exception as e:
+        print(traceback.format_exc())
+        pdb.set_trace()
     if not dry_run:
         df_feat.write_ipc(f'feat/{player}_{name}.feather')
 
@@ -525,23 +531,19 @@ def prepare(dry_run=False):
                     existing_latest_race[player][player_id] = max(existing_latest_race[player][player_id], race_date)
 
     # 最新のレースに出た馬、騎手、調教師の特徴量を計算
-    try:
-        for player in players:
-            n_players = df_encoded.n_unique(player)
-            save_player_feat = functools.partial(save_feat, player, feat_pattern, hist_pattern, dry_run=dry_run)
+    for player in players:
+        n_players = df_encoded.n_unique(player)
+        save_player_feat = functools.partial(save_feat, player, feat_pattern, hist_pattern, dry_run=dry_run)
 
-            for name, df in tqdm(df_encoded.group_by(player), desc=f'feat {player}', total=n_players):
-                new_players = []
-                for row in df.iter_rows(named=True):
-                    player_id = row[player]
-                    race_date = row['race_date']
-                    if player_id not in existing_latest_race[player] or (race_date and race_date > existing_latest_race[player].get(player_id)):
-                        new_players.append(player_id)
-                if new_players:
-                    save_player_feat(df.filter(pl.col(player).is_in(new_players)))
-    except Exception as e:
-        print(f"Error in prepare: {traceback.format_exc()}")
-        pdb.set_trace()
+        for name, df in tqdm(df_encoded.group_by(player), desc=f'feat {player}', total=n_players):
+            new_players = []
+            for row in df.iter_rows(named=True):
+                player_id = row[player]
+                race_date = row['race_date']
+                if player_id not in existing_latest_race[player] or (race_date and race_date > existing_latest_race[player].get(player_id)):
+                    new_players.append(player_id)
+            if new_players:
+                save_player_feat(df.filter(pl.col(player).is_in(new_players)))
 
 def out(dry_run=False):
     """
@@ -575,7 +577,7 @@ def out(dry_run=False):
         pdb.set_trace()
 
     print("downcasting")
-    pd_feat = df.with_column(pl.col('start_time').dt.strftime("%H:%M")).to_pandas()
+    pd_feat = df.with_columns(pl.col('start_time').dt.strftime("%H:%M")).to_pandas()
     df_fillna = pd_feat.fillna(-1, downcast='infer')
     fcols = df_fillna.select_dtypes('float').columns
     icols = df_fillna.select_dtypes('integer').columns
@@ -585,7 +587,7 @@ def out(dry_run=False):
     print(f"save to {config.feat_file}")
     df = (
         pl.from_pandas(df_fillna)
-        .with_column(
+        .with_columns(
             pl.col('start_time').cast(str).str.strptime(pl.Datetime, "%H:%M")
         )
     )

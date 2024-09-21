@@ -55,7 +55,7 @@ if __name__ == "__main__":
     # logger.info(df_feat.head().glimpse())
     logger.info(df_feat.head().select(['year', 'race_date', 'race_id', 'horse_no', 'result']))
     logger.info(df_feat.tail().select(['year', 'race_date', 'race_id', 'horse_no', 'result']))
-    df_feat = df_feat.with_column(pl.col('start_time').dt.strftime("%H:%M")).to_pandas()
+    df_feat = df_feat.with_columns(pl.col('start_time').dt.strftime("%H:%M")).to_pandas()
     lower9 = np.percentile(df_feat.query('0<prize')['prize'], [i for i in range(10,100,10)])
     middle = lower9[-1]
     middle9 = np.percentile(df_feat.query(f'{middle}<prize')['prize'], [i for i in range(10,100,10)])

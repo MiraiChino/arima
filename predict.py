@@ -27,8 +27,8 @@ class Baken:
     nums: list = field(default_factory=list)
     prob: dict = field(default_factory=dict)
     odds: dict = field(default_factory=dict)
-    df: pd.DataFrame = pd.DataFrame()
-    df2: pd.DataFrame = pd.DataFrame()
+    df: pd.DataFrame = field(default_factory=pd.DataFrame)
+    df_return: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 def standardize(x):
     """標準化関数：平均0、標準偏差1に変換"""
@@ -354,9 +354,9 @@ def good_baken(baken, odd_th=2.0):
             invest = 0
             returns = False
             min_ret, max_ret = 0, 0
-        b.df2 = pd.DataFrame()
-        b.df2["均等買い"] = pd.Series(bets_str)
-        b.df2["払戻"] = pd.Series(returns_str)
+        b.df_return = pd.DataFrame()
+        b.df_return["均等買い"] = pd.Series(bets_str)
+        b.df_return["払戻"] = pd.Series(returns_str)
         b.df.index += 1
     return baken
 

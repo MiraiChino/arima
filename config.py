@@ -73,6 +73,10 @@ splits = [
         train="'2018-01-01' <= race_date <= '2018-12-31'",
         valid="'2019-01-01' <= race_date <= '2019-12-31'",
     ),
+    Dict(
+        train="'2019-01-01' <= race_date <= '2019-12-31'",
+        valid="'2020-01-01' <= race_date <= '2020-12-31'",
+    ),
 ]
 
 lgb_models = [
@@ -126,13 +130,13 @@ cat_models = [
             'custom_metric': ['NDCG:top=1', 'NDCG:top=3', 'NDCG:top=5'],
             'eval_metric': 'NDCG:top=5',
             'use_best_model': True,
-            'early_stopping_rounds': 300,
+            'early_stopping_rounds': 500,
             'has_time': True,
         }
     ),
 ]
 
-stacking_valid = "'2020-01-01' <= race_date <= '2022-12-31'"
+stacking_valid = "'2021-01-01' <= race_date <= '2024-12-31'"
 stacking_model = Dict(
     file=f'stacking_{from_date}_{to_date}.pickle',
     target='score',

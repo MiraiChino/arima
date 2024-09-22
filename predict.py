@@ -120,7 +120,7 @@ def result_prob(df, task_logs=[]):
         horse_encoder = pickle.load(f)
 
     task_logs.append(f"encoding")
-    df = df.with_columns([
+    df = df.with_columns(
         pl.lit(None).alias('tanno1'),
         pl.lit(None).alias('tanno2'),
         pl.lit(None).alias('hukuno1'),
@@ -131,11 +131,18 @@ def result_prob(df, task_logs=[]):
         pl.lit(None).alias('huku1'),
         pl.lit(None).alias('huku2'),
         pl.lit(None).alias('huku3'),
+        pl.lit(None).alias('corner1_group'),
+        pl.lit(None).alias('corner2_group'),
+        pl.lit(None).alias('corner3_group'),
+        pl.lit(None).alias('corner4_group'),
+        pl.lit(None).alias('running'),
+        pl.lit(None).alias('running_style').cast(pl.Int8),
+        pl.col("race_id").count().over("race_id").alias("num_horses"),
         pl.col('corner').cast(str),
         pl.col('last3f').cast(float),
         pl.col('weight').cast(float),
-        pl.col('time').cast(float),
-    ])
+        pl.col('time').cast(str),
+    )
     df_formatted = horse_encoder.format(df)
     df_encoded = horse_encoder.transform(df_formatted)
     df_encoded = df_encoded.with_columns([
@@ -143,6 +150,9 @@ def result_prob(df, task_logs=[]):
         pl.col('field').cast(pl.Int8),
         pl.col('distance').cast(pl.Int16),
         pl.col('field_condition').cast(pl.Int8),
+        pl.col('place_code').cast(pl.Int8),
+        pl.col('gate').cast(pl.Int8),
+        pl.col('turn').cast(pl.Int8),
     ])
 
     task_logs.append(f"loading {config.feat_file}")
@@ -153,22 +163,30 @@ def result_prob(df, task_logs=[]):
     task_logs.append(f"searching race history")
     condition = [pl.col(column).is_in(df_encoded[column].to_list()) for column in feat_pattern.keys()]
     race_date = df_encoded["race_date"][0]
-    hist = history.filter((pl.col('race_date') < race_date) & pl.any(condition))
+    hist = history.filter((pl.col('race_date') < race_date) & pl.any_horizontal(condition))
     hist = hist.select([
         *df_encoded.columns,
-        'avetime',
+        'avetime', 'aversrize',
         'horse_oldr', 'jockey_oldr', 'trainer_oldr',
         'horse_newr', 'jockey_newr', 'trainer_newr',
     ])
+
+    # avetime
     race_condition = ['field', 'distance', 'field_condition']
     avetime = hist.select([*race_condition, 'avetime']).unique(subset=[*race_condition, 'avetime'])
     df_encoded = df_encoded.join(avetime, on=race_condition, how='left')
+
+    # aversrize
+    race_condition = ['running_style', 'field', 'distance', 'field_condition', 'place_code', 'gate', 'turn']
+    aversrize = hist.select([*race_condition, 'aversrize']).unique(subset=[*race_condition, 'aversrize'])
+    df_encoded = df_encoded.join(aversrize, on=race_condition, how='left')
+    
     df_feat = pd.DataFrame()
     for row in df_encoded.rows():
         df_agg = feature.search_history(row, hist_pattern, feat_pattern, hist)
         df_feat = pd.concat([df_feat, df_agg])
     noneed_columns = [c for c in config.NONEED_COLUMNS if c in df_feat.columns]
-    df_feat = df_feat.drop(columns=noneed_columns) # (16, 752)
+    df_feat = df_feat.drop(columns=noneed_columns) # (16, 964)
     task_logs.append(f"predict")
     preds = []
     re_modelfile = re.compile(r"^models/(.*)_\d+.*_\d+.*$")
@@ -363,8 +381,8 @@ def good_baken(baken, odd_th=2.0):
 if __name__ == "__main__":
     args = parse_args()
     race_data, horses = netkeiba.scrape_shutuba(args.race_id)
-    df_horses = pl.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
-    df_races = pl.DataFrame([race_data], columns=netkeiba.RACE_PRE_COLUMNS)
+    df_horses = pl.DataFrame(horses, schema=netkeiba.HORSE_COLUMNS, orient="row")
+    df_races = pl.DataFrame([race_data], schema=netkeiba.RACE_PRE_COLUMNS, orient="row")
     df_original = df_horses.join(df_races, on='race_id', how='left')
     print(df_original)
     p = result_prob(df_original)

@@ -43,7 +43,16 @@ class ChromeDriver(Chrome):
         def select(value):
             select = Select(self.wait_clickable_element(f"select#{selector_id}"))
             select.select_by_value(value)
-        dropdown = self.find_element_by_css_selector(f"select#{selector_id}")
+        dropdowns = self.find_elements(By.CSS_SELECTOR, f"select#{selector_id}")
+        if not dropdowns:
+          raise ValueError(f"No dropdown found with id: {selector_id}")
+
+        # 最初の<select>要素を選択
+        dropdown = dropdowns[0]
+        
+        if dropdown.tag_name.lower() != "select":
+            raise ValueError("Expected a <select> element.")
+
         values = [o.get_attribute("value") for o in Select(dropdown).options[1:]]
         for value in values:
             select(value)

@@ -27,6 +27,7 @@ def prepare_dataset(df, target):
     logger.info(f'{len(query)}races')
     x = df.drop(columns=noneed_columns)
     y = x.pop(target)
+    logger.info(f'columns: {x.columns.to_list()}')
     logger.info(x[['race_id', 'horse_no']])
     logger.info(f'{len(x.columns)=}')
     return x, y, query
@@ -52,6 +53,9 @@ if __name__ == "__main__":
     logger.add(f"temp/train_{now}.log")
 
     df_feat = pl.read_ipc(config.feat_file)
+    logger.info(df_feat)
+    logger.info("df_feat.columns")
+    logger.info(df_feat.columns)
     # logger.info(df_feat.head().glimpse())
     logger.info(df_feat.head().select(['year', 'race_date', 'race_id', 'horse_no', 'result']))
     logger.info(df_feat.tail().select(['year', 'race_date', 'race_id', 'horse_no', 'result']))
@@ -99,7 +103,7 @@ if __name__ == "__main__":
                     valid_sets=valid,
                     callbacks=[
                         lgb.log_evaluation(10),
-                        lgb.early_stopping(300),
+                        lgb.early_stopping(500),
                     ],
                 )
             l1_pred = m.predict(valid_x, num_iteration=m.best_iteration)
@@ -167,7 +171,7 @@ if __name__ == "__main__":
         valid_sets=valid,
         callbacks=[
             lgb.log_evaluation(10),
-            lgb.early_stopping(300),
+            lgb.early_stopping(500),
         ],
     )
     columns = l2_valid_x.columns.tolist() + ["lgbrankscore", "lgbrankprize", "lgbregprize", "catrankprize"]

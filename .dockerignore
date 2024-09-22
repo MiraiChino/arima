@@ -15,3 +15,4 @@ temp
 train.py
 update.sh
 venv
+ave*.feather

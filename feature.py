@@ -27,7 +27,6 @@ def parse_args():
     parser.add_argument('--dry-run', action='store_true', help='Run the script without making any file changes')
     return parser.parse_args()
 
-@lru_cache(maxsize=None)
 def get_player_newr(df, player, id):
     """
     プレイヤーの最新のレーティングを取得します（キャッシュを使用）。
@@ -231,7 +230,7 @@ def search_history(target_row, hist_pattern, feat_pattern, df):
     except IndexError as e:
         print(f"Error in search_history: {e}")
         pdb.set_trace()
-    hist = df.filter(pl.any(condition))
+    hist = df.filter(pl.any_horizontal(condition))
     
     players = ['horse', 'jockey', 'trainer']
     oldrs = [latest_newr(p, target_row, index, df) for p in players]

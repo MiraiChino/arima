@@ -16,3 +16,6 @@ train.py
 update.sh
 venv
 ave*.feather
+*.html
+*.predict
++.log

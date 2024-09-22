@@ -75,10 +75,10 @@ class PredictBaken(Task):
                 return
             self.logs.append(f"scraping: https://race.netkeiba.com/race/shutuba.html?race_id={race_id}")
             race_data, horses = netkeiba.scrape_shutuba(race_id)
-            df_horses = pl.DataFrame(horses, columns=netkeiba.HORSE_COLUMNS)
-            df_races = pl.DataFrame([race_data], columns=netkeiba.RACE_PRE_COLUMNS)
+            df_horses = pl.DataFrame(horses, schema=netkeiba.HORSE_COLUMNS, orient="row")
+            df_races = pl.DataFrame([race_data], schema=netkeiba.RACE_PRE_COLUMNS, orient="row")
             df = df_horses.join(df_races, on='race_id', how='left')
-            race_info = DotDict(df.row(0, named=True)._asdict())
+            race_info = DotDict(df.row(0, named=True))
             if df['horse_no'].null_count() == len(df['horse_no']):
                 self.logs.append(f"assign temporary horse number because failed to scrape it")
                 temporary_horse_no = pl.Series([i for i in range(1, 1+len(df['horse_no']))])

@@ -30,6 +30,14 @@ class Baken:
     df: pd.DataFrame = field(default_factory=pd.DataFrame)
     df_return: pd.DataFrame = field(default_factory=pd.DataFrame)
 
+def normalize(probs, max_value):
+    """確率を指定された最大値に正規化する関数"""
+    total_prob = sum(probs.values())
+    if total_prob == 0:
+        return {k: 0 for k in probs}  # 確率がすべて0の場合は0で返す
+    scaling_factor = max_value / total_prob
+    return {k: v * scaling_factor for k, v in probs.items()}
+
 def standardize(x):
     """標準化関数：平均0、標準偏差1に変換"""
     mean = np.mean(x)
@@ -250,6 +258,16 @@ def baken_prob(prob, names):
     baken["三連複"].prob = {tuple(sorted([no1, no2, no3])): p_sanrenpuku(*p123(no1, no2, no3, prob)) for no1, no2, no3 in baken["三連複"].nums}
     baken["複勝"].prob = {no1: p_hukushou(no1, baken["三連単"].prob) for no1 in baken["複勝"].nums}
     baken["ワイド"].prob = {(no1, no2): p_wide(no1, no2, baken["三連単"].prob) for no1, no2 in baken["ワイド"].nums}
+
+    # 各馬券の確率を正規化
+    baken["単勝"].prob = normalize(baken["単勝"].prob, 1.0)
+    baken["馬単"].prob = normalize(baken["馬単"].prob, 1.0)
+    baken["馬連"].prob = normalize(baken["馬連"].prob, 1.0)
+    baken["三連単"].prob = normalize(baken["三連単"].prob, 1.0)
+    baken["三連複"].prob = normalize(baken["三連複"].prob, 1.0)
+    baken["複勝"].prob = normalize(baken["複勝"].prob, 3.0)
+    baken["ワイド"].prob = normalize(baken["ワイド"].prob, 3.0)
+
     for b_type, b in baken.items():
         high_probs = sorted(b.prob.items(), key=lambda x: x[1], reverse=True)
         baken[b_type].nums = [i for i, _ in high_probs]

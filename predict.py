@@ -3,6 +3,8 @@ import itertools
 import math
 import re
 from dataclasses import dataclass, field
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 import dill as pickle
 import numpy as np
@@ -192,9 +194,10 @@ def result_prob(df, task_logs=[]):
     df_feat = pd.DataFrame()
     for row in df_encoded.rows():
         df_agg = feature.search_history(row, hist_pattern, feat_pattern, hist)
-        df_feat = (df_feat.copy() if df_agg.empty else df_agg.copy() if df_feat.empty
-            else pd.concat([df_feat.astype(df_agg.dtypes), df_agg.astype(df_feat.dtypes)])
-        )
+        if df_feat.empty:
+            df_feat = df_agg
+        else:
+            df_feat = pd.concat([df_feat, df_agg])
     noneed_columns = [c for c in config.NONEED_COLUMNS if c in df_feat.columns]
     df_feat = df_feat.drop(columns=noneed_columns) # (16, 964)
     task_logs.append(f"predict")

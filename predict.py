@@ -192,7 +192,9 @@ def result_prob(df, task_logs=[]):
     df_feat = pd.DataFrame()
     for row in df_encoded.rows():
         df_agg = feature.search_history(row, hist_pattern, feat_pattern, hist)
-        df_feat = pd.concat([df_feat, df_agg])
+        df_feat = (df_feat.copy() if df_agg.empty else df_agg.copy() if df_feat.empty
+            else pd.concat([df_feat.astype(df_agg.dtypes), df_agg.astype(df_feat.dtypes)])
+        )
     noneed_columns = [c for c in config.NONEED_COLUMNS if c in df_feat.columns]
     df_feat = df_feat.drop(columns=noneed_columns) # (16, 964)
     task_logs.append(f"predict")

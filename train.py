@@ -1,18 +1,43 @@
-import itertools
 from datetime import datetime
 from pathlib import Path
 
 import dill as pickle
-import lightgbm as lgb
+import lightgbm
 import numpy as np
 import pandas as pd
 import polars as pl
-from catboost import CatBoost, Pool
-from lightgbm import Dataset
 from loguru import logger
+from torch.utils.tensorboard import SummaryWriter
+from lightgbm import Dataset
+from catboost import Pool
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
+from sklearn.linear_model import LassoCV
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.preprocessing import StandardScaler
 
 import config
 
+
+class LogSummaryWriterCallback:
+    
+    def __init__(self, period=1, writer=None):
+        self.period = period
+        self.writer = writer
+    
+    def __call__(self, env):
+        if (self.period > 0) and (env.evaluation_result_list) and (((env.iteration+1) % self.period)==0):
+            if (self.writer is not None):
+                scalars = {}
+                for (name, metric, value, is_higher_better) in env.evaluation_result_list:
+                    if (metric not in scalars.keys()):
+                        scalars[metric] = {}
+                    scalars[metric][name] = value
+                    
+                for key in scalars.keys():
+                    self.writer.add_scalars(key, scalars[key], env.iteration+1)
+            else:
+                print(env.evaluation_result_list)
 
 def prepare_dataset(df, target):
     noneed_columns = config.NONEED_COLUMNS.copy() + ['prizeper']
@@ -27,7 +52,7 @@ def prepare_dataset(df, target):
     logger.info(f'{len(query)}races')
     x = df.drop(columns=noneed_columns)
     y = x.pop(target)
-    logger.info(f'columns: {x.columns.to_list()}')
+    # logger.info(f'columns: {x.columns.to_list()}')
     logger.info(x[['race_id', 'horse_no']])
     logger.info(f'{len(x.columns)=}')
     return x, y, query
@@ -47,124 +72,216 @@ def percent_prize(lower, middle, upper):
                 return i+20
     return wrapper
 
+def calculate_prize_percentiles(df_feat):
+    # 10%刻みでパーセンタイルを計算する
+    lower9 = np.percentile(df_feat.query('0<prize')['prize'], [i for i in range(10, 100, 10)])
+    middle = lower9[-1]
+    
+    # middleより大きい値でパーセンタイル計算
+    middle9 = np.percentile(df_feat.query(f'{middle}<prize')['prize'], [i for i in range(10, 100, 10)])
+    upper = middle9[-1]
+    
+    # upperより大きい値でパーセンタイル計算
+    upper9 = np.percentile(df_feat.query(f'{upper}<prize')['prize'], [i for i in range(10, 101, 10)])
+    
+    return lower9, middle9, upper9
+
+def prepare_train_valid_dataset(df_feat, config):
+    train_x, train_y, train_query = prepare_dataset(df_feat.query(config.train), target=config.target)
+    valid_x, valid_y, valid_query = prepare_dataset(df_feat.query(config.valid), target=config.target)
+    return train_x, train_y, train_query, valid_x, valid_y, valid_query
+
+def load_model(model_file):
+    logger.info(f"loading {model_file}")
+    with open(model_file, "rb") as f:
+        return pickle.load(f)
+
+def save_model(model, model_file):
+    with open(model_file, 'wb') as f:
+        pickle.dump(model, f)
+
+def train_model(model_class, train_x, train_y, config, use_scaler=False):
+    model = model_class(**config.params)
+    scaler = None
+    if use_scaler:
+        scaler = StandardScaler()
+        scaler.fit(train_x)
+        model.fit(scaler.transform(train_x), train_y)
+    else:
+        model.fit(train_x, train_y)
+    return model, scaler
+
+def lgb(df_feat, config):
+    logger.info(f'model: {config}')
+    train_x, train_y, train_query, valid_x, valid_y, valid_query = prepare_train_valid_dataset(df_feat, config)
+    model_file = Path(f'models/{config.file}')
+
+    if model_file.exists():
+        model = load_model(model_file)
+    else:
+        train = lightgbm.Dataset(train_x, train_y, group=train_query)
+        valid = lightgbm.Dataset(valid_x, valid_y, group=valid_query)
+        model = lightgbm.train(
+            config.params,
+            train,
+            num_boost_round=10000,
+            valid_sets=valid,
+            callbacks=[
+                lightgbm.log_evaluation(10),
+                lightgbm.early_stopping(500, first_metric_only=True),
+                LogSummaryWriterCallback(period=1, writer=SummaryWriter(log_dir=Path("temp", 'logs')))
+            ],
+        )
+        save_model(model, model_file)
+
+    pred_valid_x = model.predict(valid_x, num_iteration=model.best_iteration)
+    return model, pred_valid_x
+
+def randomforest_regression(df_feat, config):
+    logger.info(f'model: {config}')
+    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df_feat, config)
+    model_file = Path(f'models/{config.file}')
+
+    if model_file.exists():
+        model = load_model(model_file)
+    else:
+        model, _ = train_model(RandomForestRegressor, train_x, train_y, config.params)
+        save_model(model, model_file)
+
+    pred_valid_x = model.predict(valid_x)
+    return model, pred_valid_x
+
+def supportvector_regression(df_feat, config):
+    logger.info(f'model: {config}')
+    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df_feat, config)
+    model_file = Path(f'models/{config.file}')
+
+    if model_file.exists():
+        model, scaler = load_model(model_file)
+    else:
+        model, scaler = train_model(SVR, train_x, train_y, config.params, use_scaler=True)
+        save_model((model, scaler), model_file)
+
+    pred_valid_x = model.predict(scaler.transform(valid_x))
+    return model, scaler, pred_valid_x
+
+def lasso_regression(df_feat, config):
+    logger.info(f'model: {config}')
+    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df_feat, config)
+    model_file = Path(f'models/{config.file}')
+
+    if model_file.exists():
+        model = load_model(model_file)
+    else:
+        model, _ = train_model(LassoCV, train_x, train_y, config.params)
+        save_model(model, model_file)
+
+    pred_valid_x = model.predict(valid_x)
+    return model, pred_valid_x
+
+def kneighbors_regression(df_feat, config):
+    logger.info(f'model: {config}')
+    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df_feat, config)
+    model_file = Path(f'models/{config.file}')
+
+    if model_file.exists():
+        model = load_model(model_file)
+    else:
+        model, _ = train_model(KNeighborsRegressor, train_x, train_y, config.params)
+        save_model(model, model_file)
+
+    pred_valid_x = model.predict(valid_x)
+    return model, pred_valid_x
 
 if __name__ == "__main__":
     now = datetime.now().strftime('%Y%m%d_%H%M')
     logger.add(f"temp/train_{now}.log")
 
     df_feat = pl.read_ipc(config.feat_file)
-    logger.info(df_feat)
-    logger.info("df_feat.columns")
-    logger.info(df_feat.columns)
-    # logger.info(df_feat.head().glimpse())
+    df_feat = df_feat.with_columns(pl.col('start_time').dt.strftime("%H:%M"))
+    logger.info(f"df_feat.columns: {df_feat.columns}")
     logger.info(df_feat.head().select(['year', 'race_date', 'race_id', 'horse_no', 'result']))
     logger.info(df_feat.tail().select(['year', 'race_date', 'race_id', 'horse_no', 'result']))
-    df_feat = df_feat.with_columns(pl.col('start_time').dt.strftime("%H:%M")).to_pandas()
-    lower9 = np.percentile(df_feat.query('0<prize')['prize'], [i for i in range(10,100,10)])
-    middle = lower9[-1]
-    middle9 = np.percentile(df_feat.query(f'{middle}<prize')['prize'], [i for i in range(10,100,10)])
-    upper = middle9[-1]
-    upper9 = np.percentile(df_feat.query(f'{upper}<prize')['prize'], [i for i in range(10,101,10)])
+
+    df_feat = df_feat.to_pandas()
+    lower9, middle9, upper9 = calculate_prize_percentiles(df_feat)
     logger.info(f"prize_percentile: {lower9=}, {middle9=}, {upper9=}")
     df_feat['prizeper'] = df_feat['prize'].map(percent_prize(lower9, middle9, upper9))
 
-    l2_valid_x, l2_valid_y, l2_valid_query = prepare_dataset(df_feat.query(config.stacking_valid), target=config.stacking_model.target)
+    l2_valid_x, l2_valid_y, l2_valid_query = prepare_dataset(df_feat.query(config.l2_stacking_lgb_rank.valid), target=config.l2_stacking_lgb_rank.target)
     catfeatures_indices = [l2_valid_x.columns.get_loc(c) for c in config.cat_features if c in l2_valid_x]
     l2_valid_x_fillna = l2_valid_x.copy()
     l2_valid_x_fillna.iloc[:, catfeatures_indices] = l2_valid_x_fillna.iloc[:, catfeatures_indices].fillna(-1).astype(int)
     l2_valid = Pool(data=l2_valid_x_fillna, label=l2_valid_y, group_id=l2_valid_x['race_id'].tolist(), cat_features=catfeatures_indices)
 
+    ## Layer 1
     predicted_l1_valid_xs = []
     predicted_l2_valid_xs = []
-    queries = []
     l1_valid_xs = []
     l1_valid_ys = []
-    for i, query in enumerate(config.splits):
-        logger.info(f'Folds: {i}')
-        logger.info(query)
-        l1_preds_i = []
-        l2_preds_i = []
-        for model in config.lgb_models:
-            logger.info(f'train: {model}')
-            train_x, train_y, train_query = prepare_dataset(df_feat.query(query.train), target=model.target)
-            valid_x, valid_y, valid_query = prepare_dataset(df_feat.query(query.valid), target=model.target)
-            train = Dataset(train_x, train_y, group=train_query)
-            valid = Dataset(valid_x, valid_y, group=valid_query)
-            model_file = Path(f'models/{i}_{model.file}')
-            if model_file.exists():
-                logger.info(f"loading {model_file}")
-                with open(model_file, "rb") as f:
-                    m = pickle.load(f)
-            else:
-                m = lgb.train(
-                    model.params,
-                    train,
-                    num_boost_round=10000,
-                    valid_sets=valid,
-                    callbacks=[
-                        lgb.log_evaluation(10),
-                        lgb.early_stopping(500),
-                    ],
-                )
-            l1_pred = m.predict(valid_x, num_iteration=m.best_iteration)
-            l1_preds_i.append(l1_pred)
-            l2_pred = m.predict(l2_valid_x, num_iteration=m.best_iteration)
-            l2_preds_i.append(l2_pred)
+    l1_preds_i = []
+    l2_preds_i = []
 
-            logger.info(pd.Series(m.feature_importance(importance_type='gain'), index=train_x.columns).sort_values(ascending=False)[:50])
-            if not model_file.exists():
-                with open(f'models/{i}_{model.file}', 'wb') as f:
-                    pickle.dump(m, f)
+    # Layer 1: LightGBM LambdaRank Prize
+    lgb_rank_prize, l1_pred = lgb(df_feat=df_feat, config=config.l1_lgb_rank_prize)
+    l2_pred = lgb_rank_prize.predict(l2_valid_x, num_iteration=lgb_rank_prize.best_iteration)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
 
-        for model in config.cat_models:
-            logger.info(f'train: {model}')
-            train_x, train_y, train_query = prepare_dataset(df_feat.query(query.train), target=model.target)
-            valid_x, valid_y, valid_query = prepare_dataset(df_feat.query(query.valid), target=model.target)
-            train_x.iloc[:, catfeatures_indices] = train_x.iloc[:, catfeatures_indices].fillna(-1).astype(int)
-            valid_x.iloc[:, catfeatures_indices] = valid_x.iloc[:, catfeatures_indices].fillna(-1).astype(int)
-            train = Pool(data=train_x, label=train_y, group_id=train_x['race_id'].tolist(), cat_features=catfeatures_indices)
-            valid = Pool(data=valid_x, label=valid_y, group_id=valid_x['race_id'].tolist(), cat_features=catfeatures_indices)
-            model_file = Path(f'models/{i}_{model.file}')
-            
-            if model_file.exists():
-                logger.info(f"loading {model_file}")
-                with open(model_file, "rb") as f:
-                    m = pickle.load(f)
-            else:
-                m = CatBoost(model.param)
-                m.fit(
-                    train,
-                    eval_set=valid,
-                    verbose_eval=10,
-                )
-            l1_pred = m.predict(valid, prediction_type='RawFormulaVal')
-            l1_preds_i.append(l1_pred)
-            l2_pred = m.predict(l2_valid, prediction_type='RawFormulaVal')
-            l2_preds_i.append(l2_pred)
+    # # Layer 1: LightGBM LambdaRank Score
+    lgb_rank_score, l1_pred = lgb(df_feat=df_feat, config=config.l1_lgb_rank_score)
+    l2_pred = lgb_rank_score.predict(l2_valid_x, num_iteration=lgb_rank_score.best_iteration)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
 
-            logger.info(pd.Series(m.get_feature_importance(data=train), index=train_x.columns).sort_values(ascending=False)[:50])
-            if not model_file.exists():
-                with open(model_file, 'wb') as f:
-                    pickle.dump(m, f)
-        predicted_l1_valid_xs.append(np.column_stack(l1_preds_i))
-        predicted_l2_valid_xs.append(np.column_stack(l2_preds_i))
-        valid_x, valid_y, valid_query = prepare_dataset(df_feat.query(query.valid), target=config.stacking_model.target)
-        queries.append(valid_query)
-        l1_valid_xs.append(valid_x)
-        l1_valid_ys.append(valid_y)
+    # # Layer 1: LightGBM Regression
+    lgb_regression, l1_pred = lgb(df_feat=df_feat, config=config.l1_lgb_regression)
+    l2_pred = lgb_regression.predict(l2_valid_x, num_iteration=lgb_regression.best_iteration)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
 
-    # stacking
-    model = config.stacking_model
+    # Layer 1: RandomForest Regression
+    rf_regression, l1_pred = randomforest_regression(df_feat=df_feat, config=config.l1_rf_regression)
+    l2_pred = rf_regression.predict(l2_valid_x)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
+
+    # Layer 1: SupportVector Regression
+    svr_regression, scaler, l1_pred = supportvector_regression(df_feat=df_feat, config=config.l1_svr_regression)
+    l2_pred = svr_regression.predict(scaler.transform(l2_valid_x))
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
+
+    # Layer 1: Lasso Regression
+    lasso, l1_pred = lasso_regression(df_feat=df_feat, config=config.l1_lasso_regression)
+    l2_pred = lasso.predict(l2_valid_x)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
+
+    # Layer 1: KNeighbors Regression
+    kn_regression, l1_pred = kneighbors_regression(df_feat=df_feat, config=config.l1_kn_regression)
+    l2_pred = kn_regression.predict(l2_valid_x)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
+
+    predicted_l1_valid_xs.append(np.column_stack(l1_preds_i))
+    predicted_l2_valid_xs.append(np.column_stack(l2_preds_i))
+    l1_valid_query = config.l1_lgb_rank_prize.valid
+    valid_x, valid_y, valid_query = prepare_dataset(df_feat.query(l1_valid_query), target=config.l2_stacking_lgb_rank.target)
+    l1_valid_xs.append(valid_x)
+    l1_valid_ys.append(valid_y)
+
+    # Layer2: Stacking LightGBM LambdaRank
+    model = config.l2_stacking_lgb_ranks
     logger.info(f'train: {model}')
-    train_x = np.hstack((np.vstack(l1_valid_xs), np.vstack(predicted_l1_valid_xs))) # (544868, 752+4)
+    train_x = np.hstack((np.vstack(l1_valid_xs), np.vstack(predicted_l1_valid_xs))) # (544868, 752+7)
     train_y = np.hstack(l1_valid_ys) # (544868,)
-    train_query = np.fromiter(itertools.chain(*queries), int)
-    valid_x = np.hstack((l2_valid_x, np.mean(predicted_l2_valid_xs, axis=0))) # (142983, 752+4)
+    l2_train_query = l1_valid_query
+    valid_x = np.hstack((l2_valid_x, np.mean(predicted_l2_valid_xs, axis=0))) # (142983, 752+7)
     valid_y = l2_valid_y # (142983,)
-    valid_query = l2_valid_query
-    train = Dataset(train_x, train_y, group=train_query)
-    valid = Dataset(valid_x, valid_y, group=valid_query)
-    m = lgb.train(
+    train = Dataset(train_x, train_y, group=l2_train_query)
+    valid = Dataset(valid_x, valid_y, group=l2_valid_query)
+    m = lightgbm.train(
         model.params,
         train,
         num_boost_round=10000,
@@ -174,7 +291,7 @@ if __name__ == "__main__":
             lgb.early_stopping(500),
         ],
     )
-    columns = l2_valid_x.columns.tolist() + ["lgbrankscore", "lgbrankprize", "lgbregprize", "catrankprize"]
+    columns = l2_valid_x.columns.tolist() + ["lgbrankprize", "lgbrankscore", "lgbreg", "rf", "svr", "lasso", "knr"]
     logger.info(pd.Series(m.feature_importance(importance_type='gain'), index=columns).sort_values(ascending=False)[:50])
     with open(f'models/{model.file}', 'wb') as f:
         pickle.dump(m, f)

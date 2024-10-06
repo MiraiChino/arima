@@ -222,7 +222,12 @@ def result_prob(df, task_logs=[]):
             with open(model_file, "rb") as f:
                 m = pickle.load(f)
                 for col in config.cat_features:
-                    df_feat[col] = df_feat[col].astype('int64')
+                    if df_feat[col].isnull().any():
+                        df_feat[col] = df_feat[col].fillna(0)
+                    try:
+                        df_feat[col] = df_feat[col].astype('int64')
+                    except:
+                        import pdb; pdb.set_trace()
                 pred = m.predict(df_feat.values, prediction_type='RawFormulaVal')
                 preds_cat.append(pred)
                 task_logs.append(f"{model_name}: {[f'{p*100:.1f}%' for p in probability(pred)]}")

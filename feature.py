@@ -4,8 +4,9 @@ import pdb
 import traceback
 from collections import Counter
 from datetime import timedelta
-from functools import lru_cache
 from pathlib import Path
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 import dill as pickle
 import numpy as np
@@ -39,7 +40,7 @@ def get_player_newr(df, player, id):
     Returns:
         float: 最新のレーティング。
     """
-    player_newr = df.filter(pl.col(f'{player}_id') == id).select(f'{player}_newr')
+    player_newr = df.filter(pl.col(f'{player}_id').eq_missing(id)).select(f'{player}_newr')
     if player_newr.height == 0:
         return 0.0
     try:
@@ -226,7 +227,7 @@ def search_history(target_row, hist_pattern, feat_pattern, df):
     columns = df.columns
     index = lambda x: columns.index(x)
     try:
-        condition = [(pl.col(column) == target_row[index(column)]) for column in feat_pattern.keys()]
+        condition = [(pl.col(column).eq_missing(target_row[index(column)])) for column in feat_pattern.keys()]
     except IndexError as e:
         print(f"Error in search_history: {e}")
         pdb.set_trace()
@@ -238,7 +239,7 @@ def search_history(target_row, hist_pattern, feat_pattern, df):
     remove = ['horse_newr', 'jockey_newr', 'trainer_newr']
     feat_columns = [c for c in df.columns if c not in remove] # 72 - 3
     for column in feat_pattern.keys():
-        hist_target = hist.filter(pl.col(column) == target_row[index(column)])
+        hist_target = hist.filter(pl.col(column).eq_missing(target_row[index(column)]))
         f_pattern = feat_pattern[column]
         funcs = list(f_pattern['by_race'].keys()) + list(f_pattern['by_month'].keys())
         past_columns = [f"{col}_{x}" for col in funcs for x in hist_pattern]

@@ -46,8 +46,11 @@ def normalize(probs, max_value):
 
 def standardize(x):
     """標準化関数：平均0、標準偏差1に変換"""
+    x = np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)  # NaNや無限大を処理
     mean = np.mean(x)
     std = np.std(x)
+    if std == 0:
+        return np.zeros_like(x)  # 全て0にする
     return (x - mean) / std
 
 def softmax(x):

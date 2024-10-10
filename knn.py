@@ -24,7 +24,7 @@ class UsearchKNeighborsRegressor:
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         """与えられたデータに対して予測を行う"""
-        X_scaled = self.scaler.transform(X)
+        X_scaled = self.scaler.transform(X[self.scaler.feature_names_in_])
         results = self.index.search(X_scaled, self.k)
         neighbors_y = self.y[results.keys]
 

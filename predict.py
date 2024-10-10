@@ -238,17 +238,20 @@ def result_prob(df, task_logs=[]):
     for model_name, model in l1_models.items():
         try:
             if "lgb" in model_name:
-                pred = model.predict(df_feat.values, num_iteration=model.best_iteration)
+                values = df_feat[model.feature_name()].values
+                pred = model.predict(values, num_iteration=model.best_iteration)
             elif "sgd" in model_name:
                 df_feat = df_feat.fillna(0)
                 model, scaler = model
-                values = df_feat[scaler.feature_names_in_].values
-                pred = model.predict(scaler.transform(values))
+                df_feat = df_feat[scaler.feature_names_in_]
+                pred = model.predict(scaler.transform(df_feat))
             elif "rf" in model_name:
                 pred = model.predict(df_feat[model.feature_names_in_])
-            else:
-                values = df_feat[model.feature_names_in_].values
-                pred = model.predict(values)
+            elif "lasso" in model_name:
+                df_feat = df_feat[model.feature_names_in_]
+                pred = model.predict(df_feat)
+            elif "kn" in model_name:
+                pred = model.predict(df_feat)
         except:
             import traceback; print(traceback.format_exc())
             import pdb; pdb.set_trace()

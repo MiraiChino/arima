@@ -16,4 +16,5 @@ catboost_info
 *.predict
 *.html
 *.log
+*.index
 temp/*

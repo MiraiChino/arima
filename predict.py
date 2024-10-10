@@ -16,7 +16,11 @@ import config
 import featlist
 import feature
 import netkeiba
+from knn import UsearchKNeighborsRegressor
 
+l1_models = {}
+l2_modelname, l2_model = None, None
+re_modelfile = re.compile(r"^models/(.*)_\d+.*_\d+.*$")
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -124,7 +128,33 @@ def min_bet(odds, max_return=100000):
             return bets
     return []
 
+def load_models(task_logs=[]):
+    global l1_models, l2_modelname, l2_model
+
+    for model_config in config.l1_models:
+        model_file = f"models/{model_config.file}"
+        model_name = re_modelfile.match(model_file).groups()[0]
+        if model_name not in l1_models:
+            with open(model_file, "rb") as f:
+                if "kn" in model_name:
+                    model = UsearchKNeighborsRegressor()
+                    model.load(model_file)
+                else:
+                    model = pickle.load(f)
+                l1_models[model_name] = model
+                task_logs.append(f"loaded {model_name}")
+
+    if not l2_model:
+        model_file = f"models/{config.l2_stacking_lgb_rank.file}"
+        l2_modelname = re_modelfile.match(model_file).groups()[0]
+        with open(model_file, "rb") as f:
+            l2_model = pickle.load(f)
+            task_logs.append(f"loaded {l2_modelname}")
+
 def result_prob(df, task_logs=[]):
+    task_logs.append(f"loading models")
+    load_models(task_logs)  # モデルを事前にロード
+
     task_logs.append(f"loading {config.encoder_file}")
     with open(config.encoder_file, "rb") as f:
         horse_encoder = pickle.load(f)
@@ -202,46 +232,36 @@ def result_prob(df, task_logs=[]):
     df_feat = df_feat.drop(columns=noneed_columns) # (16, 964)
     task_logs.append(f"predict")
     preds = []
-    re_modelfile = re.compile(r"^models/(.*)_\d+.*_\d+.*$")
-    for model in config.lgb_models:
-        preds_lgb = []
-        for i in range(len(config.splits)):
-            model_file = f"models/{i}_{model.file}"
-            model_name = re_modelfile.match(model_file).groups()[0]
-            with open(model_file, "rb") as f:
-                m = pickle.load(f)
-                pred = m.predict(df_feat.values, num_iteration=m.best_iteration)
-                preds_lgb.append(pred)
-                task_logs.append(f"{model_name}: {[f'{p*100:.1f}%' for p in probability(pred)]}")
-        preds.append(preds_lgb)
-    for model in config.cat_models:
-        preds_cat = []
-        for i in range(len(config.splits)):
-            model_file = f"models/{i}_{model.file}"
-            model_name = re_modelfile.match(model_file).groups()[0]
-            with open(model_file, "rb") as f:
-                m = pickle.load(f)
-                for col in config.cat_features:
-                    if df_feat[col].isnull().any():
-                        df_feat[col] = df_feat[col].fillna(0)
-                    try:
-                        df_feat[col] = df_feat[col].astype('int64')
-                    except:
-                        import pdb; pdb.set_trace()
-                pred = m.predict(df_feat.values, prediction_type='RawFormulaVal')
-                preds_cat.append(pred)
-                task_logs.append(f"{model_name}: {[f'{p*100:.1f}%' for p in probability(pred)]}")
-        preds.append(preds_cat)
+
+    # Layer 1 predictions
+    preds_l1 = []
+    for model_name, model in l1_models.items():
+        try:
+            if "lgb" in model_name:
+                pred = model.predict(df_feat.values, num_iteration=model.best_iteration)
+            elif "sgd" in model_name:
+                df_feat = df_feat.fillna(0)
+                model, scaler = model
+                values = df_feat[scaler.feature_names_in_].values
+                pred = model.predict(scaler.transform(values))
+            elif "rf" in model_name:
+                pred = model.predict(df_feat[model.feature_names_in_])
+            else:
+                values = df_feat[model.feature_names_in_].values
+                pred = model.predict(values)
+        except:
+            import traceback; print(traceback.format_exc())
+            import pdb; pdb.set_trace()
+        preds_l1.append(pred)
+        task_logs.append(f"{model_name}: {[f'{p*100:.1f}%' for p in probability(pred)]}")
+        preds.append(preds_l1)
+
+    # Layer 2 prediction
     stacked_feat = np.array(preds).mean(axis=1).T # (16, 4)
     x = np.hstack([df_feat, stacked_feat]) # (16, 756)
-    model = config.stacking_model
-    model_file = f"models/{model.file}"
-    model_name = re_modelfile.match(model_file).groups()[0]
-    with open(model_file, "rb") as f:
-        m = pickle.load(f)
-        pred = m.predict(x, num_iteration=m.best_iteration)
-        prob = probability(pred)
-        task_logs.append(f"{model_name}: {[f'{p*100:.1f}%' for p in probability(pred)]}")
+    pred = l2_model.predict(x, num_iteration=l2_model.best_iteration)
+    prob = probability(pred)
+    task_logs.append(f"{l2_modelname}: {[f'{p*100:.1f}%' for p in probability(pred)]}")
     return {i: p for i, p in zip(df_feat["horse_no"].to_list(), prob)}
 
 def baken_prob(prob, names):

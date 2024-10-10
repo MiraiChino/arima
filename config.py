@@ -96,24 +96,21 @@ l1_rf_regression = Dict(
     target='prizeper',
     params={
         'n_estimators': 100,
-        'verbose': 2,
         'n_jobs': -1,
+        'verbose': 0,
     }
 )
 
-# Layer1: SpportVectorRegression
-l1_svr_regression = Dict(
+# Layer1: SGDRegressor
+l1_sgd_regression = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
-    file=f'svrprize_{from_date}_{to_date}.pickle',
+    file=f'sgdrprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
-        'kernel': 'rbf',
-        'gamma': 1,
-        'C': 1,
-        'epsilon': 0.1,
-        'cache_size': 1024,
-        'verbose': True,
+        'max_iter': 10000,
+        'learning_rate': 'adaptive',
+        'verbose': 0,
     }
 )
 
@@ -125,7 +122,7 @@ l1_lasso_regression = Dict(
     target='prizeper',
     params={
         'n_jobs': -1,
-        'verbose': True,
+        'verbose': 0,
     }
 )
 
@@ -136,10 +133,18 @@ l1_kn_regression = Dict(
     file=f'knprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
-        'n_neighbors': 5,
-        'n_jobs': -1,
+        'k': 5,
     }
 )
+l1_models = [
+    l1_lgb_rank_prize,
+    l1_lgb_rank_score,
+    l1_lgb_regression,
+    l1_rf_regression,
+    l1_sgd_regression,
+    l1_lasso_regression,
+    l1_kn_regression
+]
 
 # Layer2: Stacking model: LightGBM LambdaRank
 l2_stacking_lgb_rank = Dict(

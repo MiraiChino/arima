@@ -1,15 +1,16 @@
 import pdb
+import pickle
 import polars as pl
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from itertools import combinations
 from pathlib import Path
 from tqdm import tqdm
-import pickle
 
 import config
 import predict
 
 
-PROGRESS_FILE = "temp/racefeat_progress.pkl"  # 進捗を保存するファイル
+PROGRESS_FILE = "temp/racefeat_progress.pickle"  # 進捗を保存するファイル
 SAVE_INTERVAL = 10  # 10レースごとに保存
 
 # 進捗状況を保存
@@ -96,6 +97,42 @@ def baken_hit(predicted, actual):
 
     return sum(x for x in hit.values())
 
+def process_race(df, df_shutsuba, breakpoints, bin_count=10):
+    race_dict = {}
+    race_id = str(df.get_column("race_id")[0])
+
+    # 各カラムのビンを生成し、カウントを更新
+    for col, breaks in breakpoints.items():
+        # ラベルを初期化
+        labels = [str(i) for i in range(bin_count)]
+        for i in labels:
+            race_dict[f"{col}_bin{i}"] = 0
+
+        # データをビンにカット
+        bins = df[col].cut(breaks, labels=labels)
+        for i in bins:
+            key = f"{col}_bin{i}"
+            race_dict[key] += 1
+
+    # 予測結果
+    result_prob = predict.result_prob(df_shutsuba)
+
+    # 予測結果と実際の結果のデータフレームを作成
+    s_prob = pl.Series([v for k, v in sorted(result_prob.items())])
+    df_results = df.select("horse_no", "result").with_columns(s_prob.alias("prob"))
+
+    # 馬券の予測
+    df_sorted = df_results.sort(by='prob', descending=True)
+    predicted = df_sorted.get_column("result").to_list()
+    actual = df_shutsuba.get_column("horse_no").to_list()
+    baken_predicted = generate_baken(predicted)
+    baken_actual = generate_baken(actual)
+    
+    # 馬券の的中数
+    bakenhit = baken_hit(baken_predicted, baken_actual)
+
+    return race_dict, bakenhit, race_id
+
 if __name__ == "__main__":
     if Path(config.racefeat_file).exists():
         print(f"Skip racefeat. Already exists {config.racefeat_file}.")
@@ -115,6 +152,9 @@ if __name__ == "__main__":
         # 不要なカラムを除外して新しいデータフレームを作成
         df_x = df_feat.select(pl.exclude(config.NONEED_COLUMNS))
 
+        # 進捗のロード
+        race_features, race_bakenhits, processed_races = load_progress()
+
         # ビンの数を設定
         bin_count = 10
         breakpoints = {}
@@ -123,69 +163,52 @@ if __name__ == "__main__":
         for col in tqdm(df_x.columns, desc="Calculating breakpoints for features"):
             breakpoints[col] = df_x[col].hist(bin_count=bin_count)["breakpoint"].to_list()[:-1]
 
-        # 進捗のロード
-        race_features, race_bakenhits, processed_races = load_progress()
-        processed_count = 0  # 処理されたレースのカウント
-
         # 各レース日ごとにデータフレームをグループ化
-        for racedate, df in tqdm(df_feat.group_by(config.RACEDATE_COLUMNS), total=len(df_feat.group_by(config.RACEDATE_COLUMNS).len()), desc="Processing races"):
-            race_id = str(df.get_column("race_id")[0])
+        races = df_feat.group_by(config.RACEDATE_COLUMNS)
 
-            # すでに処理済みのレースはスキップ
-            if race_id in processed_races:
-                continue
+        # 並列処理を実行
+        with ProcessPoolExecutor() as executor:
+            futures = []
+            for racedate, df in tqdm(races, total=len(races.len()), desc="Processing races"):
+                race_id = str(df.get_column("race_id")[0])
 
-            race_dict = {}
+                # すでに処理済みのレースはスキップ
+                if race_id in processed_races:
+                    continue
 
-            # 各カラムのビンを生成し、カウントを更新
-            for col, breaks in breakpoints.items():
-                # ラベルを初期化
-                labels = [str(i) for i in range(bin_count)]
-                for i in labels:
-                    race_dict[f"{col}_bin{i}"] = 0
+                # 対応する出馬データ
+                df_shutsuba = df_netkeiba.filter(pl.col("race_id") == race_id)
 
-                # データをビンにカット
-                bins = df[col].cut(breaks, labels=labels)
-                for i in bins:
-                    key = f"{col}_bin{i}"
-                    race_dict[key] += 1
-            race_features.append(race_dict)
+                # 各レースの処理を非同期で実行
+                futures.append(executor.submit(process_race, df, df_shutsuba, breakpoints, bin_count))
 
-            # 対応する出馬データ
-            race_id = str(df.get_column("race_id")[0])
-            df_shutsuba = df_netkeiba.filter(pl.col("race_id") == race_id)
+                # 一定数 (SAVE_INTERVAL) のレースが処理されたら進捗を保存
+                if len(futures) % SAVE_INTERVAL == 0:
+                    for future in as_completed(futures):
+                        race_dict, bakenhit, race_id = future.result()
+                        race_features.append(race_dict)
+                        race_bakenhits.append(bakenhit)
+                        processed_races.add(race_id)
 
-            # 予測結果
-            result_prob = predict.result_prob(df_shutsuba)
+                    # 一定数ごとに進捗を保存
+                    save_progress(race_features, race_bakenhits, processed_races)
+                    futures.clear()  # 処理が完了したfuturesをクリア
 
-            # 予測結果と実際の結果のデータフレームを作成
-            s_prob = pl.Series([v for k, v in sorted(result_prob.items())])
-            df_results = df.select("horse_no", "result").with_columns(s_prob.alias("prob"))
+            # 残りのfutures（SAVE_INTERVAL未満のもの）を処理
+            for future in as_completed(futures):
+                race_dict, bakenhit, race_id = future.result()  # 各レースの結果を取得
+                race_features.append(race_dict)
+                race_bakenhits.append(bakenhit)
+                processed_races.add(race_id)
 
-            # 馬券の予測
-            df_sorted = df_results.sort(by='prob', descending=True)
-            predicted = df_sorted.get_column("result").to_list()
-            actual = df_shutsuba.get_column("horse_no").to_list()
-            baken_predicted = generate_baken(predicted)
-            baken_actual = generate_baken(actual)
-            
-            # 馬券の的中数
-            bakenhit = baken_hit(baken_predicted, baken_actual)
-            race_bakenhits.append(bakenhit)
+        # 最後に全ての進捗を保存
+        save_progress(race_features, race_bakenhits, processed_races)
+        print(f"Final progress saved for all races.")
 
-            # 処理済みのレースIDを保存
-            processed_races.add(race_id)
-            processed_count += 1
+        # 結果のデータフレームを作成して保存
+        df_race = pl.DataFrame(race_features)
+        df_race = df_race.with_columns(pl.Series(race_bakenhits).alias("bakenhit"))
+        df_race.write_ipc(config.racefeat_file)
+        print(f"Race features saved to {config.racefeat_file}.")
 
-            # 進捗状況の保存
-            if processed_count % SAVE_INTERVAL == 0:
-                save_progress(race_features, race_bakenhits, processed_races)
-
-        df_race = pl.DataFrame(race_features).with_columns(pl.Series(race_bakenhits).alias("hit"))
-
-        if not Path(config.racefeat_file).exists():
-            df_race.write_ipc(config.racefeat_file)
-
-        # 最終結果保存後に進捗ファイルを削除
-        if Path(PROGRESS_FILE).exists():
-            Path(PROGRESS_FILE).unlink()
+        # TODO: ↑をつかって馬券の的中率を予測する

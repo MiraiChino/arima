@@ -6,6 +6,8 @@ echo python feature.py
 python feature.py
 echo python train.py | tee temp/train_$today.log
 python train.py | tee temp/train_$today.log
+echo python bakenhit.py
+python bakenhit.py
 echo docker compose -f docker-compose.deploy.yml build
 docker compose -f docker-compose.deploy.yml build
 echo docker tag lambda_arima us-west1-docker.pkg.dev/arima-339214/arima/lambda_arima:$today

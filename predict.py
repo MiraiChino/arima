@@ -21,6 +21,10 @@ from knn import UsearchKNeighborsRegressor
 l1_models = {}
 l2_modelname, l2_model = None, None
 re_modelfile = re.compile(r"^models/(.*)_\d+.*_\d+.*$")
+horse_encoder = None
+history = None
+hist_pattern = featlist.hist_pattern
+feat_pattern = featlist.feature_pattern
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -131,9 +135,10 @@ def min_bet(odds, max_return=100000):
             return bets
     return []
 
-def load_models(task_logs=[]):
-    global l1_models, l2_modelname, l2_model
+def load_models_and_configs(task_logs=[]):
+    global l1_models, l2_modelname, l2_model, horse_encoder, history, hist_pattern, feat_pattern
 
+    task_logs.append(f"loading models")
     for model_config in config.l1_models:
         model_file = f"models/{model_config.file}"
         model_name = re_modelfile.match(model_file).groups()[0]
@@ -154,14 +159,16 @@ def load_models(task_logs=[]):
             l2_model = pickle.load(f)
             task_logs.append(f"loaded {l2_modelname}")
 
-def result_prob(df, task_logs=[]):
-    task_logs.append(f"loading models")
-    load_models(task_logs)  # モデルを事前にロード
-
     task_logs.append(f"loading {config.encoder_file}")
-    with open(config.encoder_file, "rb") as f:
-        horse_encoder = pickle.load(f)
+    if horse_encoder is None:
+        with open(config.encoder_file, "rb") as f:
+            horse_encoder = pickle.load(f)
 
+    task_logs.append(f"loading {config.feat_file}")
+    if history is None:
+        history = pl.read_ipc(config.feat_file)
+
+def result_prob(df, task_logs=[]):
     task_logs.append(f"encoding")
     df = df.with_columns(
         pl.lit(None).alias('tanno1'),
@@ -197,11 +204,6 @@ def result_prob(df, task_logs=[]):
         pl.col('gate').cast(pl.Int8),
         pl.col('turn').cast(pl.Int8),
     ])
-
-    task_logs.append(f"loading {config.feat_file}")
-    history = pl.read_ipc(config.feat_file)
-    hist_pattern = featlist.hist_pattern
-    feat_pattern = featlist.feature_pattern
 
     task_logs.append(f"searching race history")
     condition = [pl.col(column).is_in(df_encoded[column].to_list()) for column in feat_pattern.keys()]
@@ -439,6 +441,7 @@ if __name__ == "__main__":
     df_races = pl.DataFrame([race_data], schema=netkeiba.RACE_PRE_COLUMNS, orient="row")
     df_original = df_horses.join(df_races, on='race_id', how='left')
     print(df_original)
+    load_models_and_configs()  # モデルを事前にロード
     p = result_prob(df_original)
     print(p)
     names = {no: name for no, name in zip(df_original["horse_no"].to_list(), df_original["name"].to_list())}

@@ -36,6 +36,8 @@ dataset_query = Dict(
     layer1_valid="'2021-01-01' <= race_date <= '2022-12-31'",
     layer2_train="'2021-01-01' <= race_date <= '2022-12-31'",
     layer2_valid="'2023-01-01' <= race_date <= '2024-12-31'",
+    train="'2008-01-01' <= race_date <= '2021-12-31'",
+    valid="'2022-01-01' <= race_date <= '2024-12-31'",
 )
 
 # category features
@@ -162,17 +164,16 @@ l2_stacking_lgb_rank = Dict(
     },
 )
 
-# 予測確率を予測するモデル
-prob_valid = "'2023-01-01' <= race_date <= '2024-12-31'"
-prob_model = Dict(
-    file=f'prob_{from_date}_{to_date}.pickle',
-    target='result',
+# 馬券的中率を予測するモデル
+bakenhit_lgb_reg = Dict(
+    train=dataset_query.train,
+    valid=dataset_query.valid,
+    file=f'bakenhit_{from_date}_{to_date}.pickle',
+    target='bakenhit',
     params={
-        'objective': 'lambdarank',
-        'metric': 'ndcg',
-        'lambdarank_truncation_level': 10,
-        'ndcg_eval_at': [1, 3, 5],
+        'objective': 'regression',
         'boosting_type': 'gbdt',
-        'learning_rate': 0.01,
-    },
+        'metric': 'rmse',
+        'learning_rate': 0.01
+    }
 )

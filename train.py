@@ -120,9 +120,9 @@ def train_model(model_class, train_x, train_y, params, use_scaler=False):
     logger.info(f'Training complete for model: {model_class.__name__}')
     return model, scaler
 
-def lgb(df_feat, config):
+def lgb(df, config):
     logger.info(f'model: {config}')
-    train_x, train_y, train_query, valid_x, valid_y, valid_query = prepare_train_valid_dataset(df_feat, config)
+    train_x, train_y, train_query, valid_x, valid_y, valid_query = prepare_train_valid_dataset(df, config)
     model_file = Path(f'models/{config.file}')
 
     if model_file.exists():
@@ -149,9 +149,9 @@ def lgb(df_feat, config):
     pred_valid_x = model.predict(valid_x, num_iteration=model.best_iteration)
     return model, pred_valid_x
 
-def randomforest_regression(df_feat, config):
+def randomforest_regression(df, config):
     logger.info(f'model: {config}')
-    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df_feat, config)
+    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df, config)
     model_file = Path(f'models/{config.file}')
 
     if model_file.exists():
@@ -164,9 +164,9 @@ def randomforest_regression(df_feat, config):
     pred_valid_x = model.predict(valid_x)
     return model, pred_valid_x
 
-def sgd_regression(df_feat, config):
+def sgd_regression(df, config):
     logger.info(f'model: {config}')
-    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df_feat, config)
+    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df, config)
     model_file = Path(f'models/{config.file}')
 
     if model_file.exists():
@@ -179,9 +179,9 @@ def sgd_regression(df_feat, config):
     pred_valid_x = model.predict(scaler.transform(valid_x))
     return model, scaler, pred_valid_x
 
-def lasso_regression(df_feat, config):
+def lasso_regression(df, config):
     logger.info(f'model: {config}')
-    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df_feat, config)
+    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df, config)
     model_file = Path(f'models/{config.file}')
 
     if model_file.exists():
@@ -194,9 +194,9 @@ def lasso_regression(df_feat, config):
     pred_valid_x = model.predict(valid_x)
     return model, pred_valid_x
 
-def kneighbors_regression(df_feat, config):
+def kneighbors_regression(df, config):
     logger.info(f'model: {config}')
-    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df_feat, config)
+    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df, config)
     model_file = Path(f'models/{config.file}')
 
     if model_file.exists():

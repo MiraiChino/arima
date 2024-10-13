@@ -120,11 +120,21 @@ def train_model(model_class, train_x, train_y, params, use_scaler=False):
     logger.info(f'Training complete for model: {model_class.__name__}')
     return model, scaler
 
-def lgb(df, config):
+def lgb(df, config, reg=False):
     logger.info(f'model: {config}')
     train_x, train_y, train_query, valid_x, valid_y, valid_query = prepare_train_valid_dataset(df, config)
-    model_file = Path(f'models/{config.file}')
 
+    if reg:
+        model = lightgbm_model(config, train_x, train_y, valid_x, valid_y)
+    else:
+        model = lightgbm_model(config, train_x, train_y, valid_x, valid_y, train_query, valid_query)
+
+    logger.info('Predicting on validation set...')
+    pred_valid_x = model.predict(valid_x, num_iteration=model.best_iteration)
+    return model, pred_valid_x
+
+def lightgbm_model(config, train_x, train_y, valid_x, valid_y, train_query=None, valid_query=None):
+    model_file = Path(f'models/{config.file}')
     if model_file.exists():
         logger.info(f'Loading model from {model_file}')
         model = load_model(model_file)
@@ -144,10 +154,7 @@ def lgb(df, config):
             ],
         )
         save_model(model, model_file)
-
-    logger.info('Predicting on validation set...')
-    pred_valid_x = model.predict(valid_x, num_iteration=model.best_iteration)
-    return model, pred_valid_x
+    return model
 
 def randomforest_regression(df, config):
     logger.info(f'model: {config}')
@@ -241,49 +248,49 @@ if __name__ == "__main__":
 
     # Layer 1: LightGBM LambdaRank Prize
     logger.info(f'--- Layer 1: LightGBM LambdaRank Prize ---')
-    lgb_rank_prize, l1_pred = lgb(df_feat=df_feat, config=config.l1_lgb_rank_prize)
+    lgb_rank_prize, l1_pred = lgb(df=df_feat, config=config.l1_lgb_rank_prize)
     l2_pred = lgb_rank_prize.predict(l2_valid_x, num_iteration=lgb_rank_prize.best_iteration)
     l1_preds_i.append(l1_pred)
     l2_preds_i.append(l2_pred)
 
     # Layer 1: LightGBM LambdaRank Score
     logger.info(f'--- Layer 1: LightGBM LambdaRank Score ---')
-    lgb_rank_score, l1_pred = lgb(df_feat=df_feat, config=config.l1_lgb_rank_score)
+    lgb_rank_score, l1_pred = lgb(df=df_feat, config=config.l1_lgb_rank_score)
     l2_pred = lgb_rank_score.predict(l2_valid_x, num_iteration=lgb_rank_score.best_iteration)
     l1_preds_i.append(l1_pred)
     l2_preds_i.append(l2_pred)
 
     # Layer 1: LightGBM Regression
     logger.info(f'--- Layer 1: LightGBM Regression ---')
-    lgb_regression, l1_pred = lgb(df_feat=df_feat, config=config.l1_lgb_regression)
+    lgb_regression, l1_pred = lgb(df=df_feat, config=config.l1_lgb_regression, reg=True)
     l2_pred = lgb_regression.predict(l2_valid_x, num_iteration=lgb_regression.best_iteration)
     l1_preds_i.append(l1_pred)
     l2_preds_i.append(l2_pred)
 
     # Layer 1: RandomForest Regression
     logger.info(f'--- Layer 1: RandomForest Regression ---')
-    rf_regression, l1_pred = randomforest_regression(df_feat=df_feat, config=config.l1_rf_regression)
+    rf_regression, l1_pred = randomforest_regression(df=df_feat, config=config.l1_rf_regression)
     l2_pred = rf_regression.predict(l2_valid_x)
     l1_preds_i.append(l1_pred)
     l2_preds_i.append(l2_pred)
 
     # Layer 1: SGD Regressor
     logger.info(f'--- Layer 1: SGD Regressor ---')
-    sgd_regression, sgd_scaler, l1_pred = sgd_regression(df_feat=df_feat, config=config.l1_sgd_regression)
+    sgd_regression, sgd_scaler, l1_pred = sgd_regression(df=df_feat, config=config.l1_sgd_regression)
     l2_pred = sgd_regression.predict(sgd_scaler.transform(l2_valid_x))
     l1_preds_i.append(l1_pred)
     l2_preds_i.append(l2_pred)
 
     # Layer 1: Lasso Regression
     logger.info(f'--- Layer 1: Lasso Regression ---')
-    lasso, l1_pred = lasso_regression(df_feat=df_feat, config=config.l1_lasso_regression)
+    lasso, l1_pred = lasso_regression(df=df_feat, config=config.l1_lasso_regression)
     l2_pred = lasso.predict(l2_valid_x)
     l1_preds_i.append(l1_pred)
     l2_preds_i.append(l2_pred)
 
     # Layer 1: KNeighbors Regression
     logger.info(f'--- Layer 1: KNeighbors Regression ---')
-    kn_regression, l1_pred = kneighbors_regression(df_feat=df_feat, config=config.l1_kn_regression)
+    kn_regression, l1_pred = kneighbors_regression(df=df_feat, config=config.l1_kn_regression)
     l2_pred = kn_regression.predict(l2_valid_x)
     l1_preds_i.append(l1_pred)
     l2_preds_i.append(l2_pred)
@@ -313,10 +320,10 @@ if __name__ == "__main__":
         valid_sets=valid,
         callbacks=[
             lightgbm.log_evaluation(10),
-            lightgbm.early_stopping(500),
+            lightgbm.early_stopping(1000),
+            LogSummaryWriterCallback(period=1, writer=SummaryWriter(log_dir=Path("temp", 'logs')))
         ],
     )
-    columns = l2_valid_x.columns.tolist() + ["lgbrankprize", "lgbrankscore", "lgbreg", "rf", "svr", "lasso", "knr"]
-    logger.info(pd.Series(m.feature_importance(importance_type='gain'), index=columns).sort_values(ascending=False)[:50])
+    logger.info(pd.Series(m.feature_importance(importance_type='gain'), index=m.feature_name()).sort_values(ascending=False)[:50])
     with open(f'models/{model.file}', 'wb') as f:
         pickle.dump(m, f)

@@ -166,6 +166,8 @@ l2_stacking_lgb_rank = Dict(
 
 # 馬券的中率を予測するモデル
 bakenhit_lgb_reg = Dict(
+    feature_importance_model=l1_lasso_regression.file,
+    feature_importance_len=300,
     train=dataset_query.train,
     valid=dataset_query.valid,
     file=f'bakenhit_{from_date}_{to_date}.pickle',

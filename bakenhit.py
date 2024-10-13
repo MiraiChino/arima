@@ -1,34 +1,13 @@
 import pdb
+import pickle
 import polars as pl
 from itertools import combinations
 from pathlib import Path
 from tqdm import tqdm
-import pickle
 
 import config
 import predict
 import train
-
-PROCESSED_RACES_FILE = "temp/processed_races.pickle"
-SAVE_INTERVAL = 1000  # 1000レースごとに保存
-
-# 進捗状況を保存
-def save_progress(race_features_df, processed_races):
-    race_features_df.write_ipc(config.racefeat_file)  # config.racefeat_fileに保存
-    with open(PROCESSED_RACES_FILE, 'wb') as f:
-        pickle.dump(processed_races, f)  # processed_racesをpickleファイルに保存
-
-# 進捗状況を読み込み
-def load_progress():
-    race_features_df = pl.DataFrame()  # 進捗がない場合の初期値
-    processed_races = set()  # 初期のprocessed_races
-
-    if Path(config.racefeat_file).exists() and Path(PROCESSED_RACES_FILE).exists():
-        race_features_df = pl.read_ipc(config.racefeat_file)
-        with open(PROCESSED_RACES_FILE, 'rb') as f:
-            processed_races = pickle.load(f)
-
-    return race_features_df, processed_races
 
 def generate_baken(order):
     # 着順が3未満の場合のエラーチェック
@@ -114,7 +93,7 @@ def process_race(df, df_shutsuba, breakpoints, bin_count=10):
 
     return race_dict, bakenhit, race_id
 
-def racefeat():
+def save_racefeat():
     print(f'loading {config.netkeiba_file}')
     try:
         df_netkeiba = pl.read_ipc(config.netkeiba_file)
@@ -129,9 +108,16 @@ def racefeat():
     # 不要なカラムを除外して新しいデータフレームを作成
     df_x = df_feat.select(pl.exclude(config.NONEED_COLUMNS))
 
-    # 進捗のロード
-    race_features_df, processed_races = load_progress()
+    print(f"loading models/{config.bakenhit_lgb_reg.feature_importance_model}")
+    with open(f"models/{config.bakenhit_lgb_reg.feature_importance_model}", "rb") as f:
+        m = pickle.load(f)
+        importance = pl.DataFrame({
+            "column": m.feature_name(),
+            "importance": m.feature_importance(importance_type='gain')
+        }).sort(by="importance", descending=True)
+        use_columns = importance.head(config.bakenhit_lgb_reg.feature_importance_len).get_column("column").to_list()
 
+    df_x = df_x[use_columns]
     # ビンの数を設定
     bin_count = 10
     breakpoints = {}
@@ -140,39 +126,48 @@ def racefeat():
     for col in tqdm(df_x.columns, desc="Calculating breakpoints for features"):
         breakpoints[col] = df_x[col].hist(bin_count=bin_count)["breakpoint"].to_list()[:-1]
 
-    # 各レース日ごとにデータフレームをグループ化
-    races = df_feat.group_by(config.RACEDATE_COLUMNS)
+    # ジェネレータを使用してレースを処理
+    group = df_feat.group_by(config.RACEDATE_COLUMNS)
+    total = len(group.len())
 
-    # モデルなどをロード
+    # モデルをロード
+    print("loading models")
     predict.load_models_and_configs()
 
-    # 1レースずつ特徴量と馬券の的中数を計算
-    # 並列化するとモデルのロードがボトルネックになるため遅くなった
-    for racedate, df in tqdm(races, total=len(races.len()), desc="Processing races"):
+    for racedate, df in tqdm(group, total=total, desc="Processing races"):
         race_id = str(df.get_column("race_id")[0])
+        feather_file = f"racefeat/{race_id}.feather"
 
-        # すでに処理済みのレースはスキップ
-        if race_id in processed_races:
+        if Path(feather_file).exists():
             continue
 
-        # 対応する出馬データ
         df_shutsuba = df_netkeiba.filter(pl.col("race_id") == race_id)
 
         race_dict, bakenhit, race_id = process_race(df, df_shutsuba, breakpoints, bin_count)
-        race_dict['bakenhit'] = bakenhit  # bakenhitをrace_dictに追加
-        race_features_df = race_features_df.vstack(pl.DataFrame([race_dict]))
-        processed_races.add(race_id)
-        if len(processed_races) % SAVE_INTERVAL == 0:
-            save_progress(race_features_df, processed_races)
-
-    # 最後に全ての進捗を保存
-    save_progress(race_features_df, processed_races)
-    print(f"Final progress saved for all races.")
-
-    return df_race
+        race_dict['race_id'] = race_id
+        race_dict['bakenhit'] = bakenhit
+        race_features_df = pl.DataFrame([race_dict])
+        race_features_df.write_ipc(feather_file)
 
 if __name__ == "__main__":
-    df_race = racefeat()
+    if Path(config.racefeat_file).exists():
+        print(f"Already exists {config.racefeat_file}.")
+        df_race = pl.read_ipc(config.racefeat_file)
+    else:
+        save_racefeat()
+        
+        # 全ての.featherファイルを読み込み、結合
+        print("loading racefeat/*.feather")
+        df_race = pl.scan_ipc("racefeat/*.feather").collect()
+        import pdb; pdb.set_trace()
+        df_race.write_ipc(config.racefeat_file)
+        print(f"Final race features saved to {config.racefeat_file}.")
 
     # 馬券の的中率を予測する
-    bakenhit_model, _ = train.lgb(df=df_race, config=config.bakenhit_lgb_reg)
+    df_race = df_race.to_pandas()
+    bakenhit_config = config.bakenhit_lgb_reg
+    train_x = df_race.query(bakenhit_config.train).drop(columns=["race_id"])
+    train_y = train_x.pop(bakenhit_config.target)
+    valid_x = df_race.query(bakenhit_config.valid).drop(columns=["race_id"])
+    valid_y = valid_x.pop(bakenhit_config.target)
+    train.lightgbm_model(bakenhit_config, train_x, train_y, valid_x, valid_y)

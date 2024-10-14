@@ -77,9 +77,18 @@ def process_race(df, df_shutsuba, breakpoints, bin_count=10):
     # 予測結果
     result_prob = predict.result_prob(df_shutsuba)
 
-    # 予測結果と実際の結果のデータフレームを作成
-    s_prob = pl.Series([v for k, v in sorted(result_prob.items())])
-    df_results = df.select("horse_no", "result").with_columns(s_prob.alias("prob"))
+    try:
+        # 重複を削除
+        df_filtered = df.unique(subset="name", keep="first").sort(by="horse_no")
+
+        # 予測結果と実際の結果のデータフレームを作成
+        s_prob = pl.Series([v for k, v in sorted(result_prob.items())])
+        df_results = df_filtered.select("horse_no", "result").with_columns(s_prob.alias("prob"))
+    except:
+        # デバッグ用の出力
+        print(f"df length: {len(df)}")
+        print(f"s_prob length: {len(s_prob)}")
+        import pdb; pdb.set_trace()
 
     # 馬券の予測
     df_sorted = df_results.sort(by='prob', descending=True)

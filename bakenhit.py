@@ -1,14 +1,26 @@
+import itertools
 import pdb
 import pickle
 import pandas as pd
 import polars as pl
-from itertools import combinations
 from pathlib import Path
 from tqdm import tqdm
 
 import config
 import predict
-import train
+
+
+def baken_hit(predicted, actual):
+    hit = {
+        '単勝': int(predicted['単勝'] == actual['単勝']),
+        '複勝': len(set(predicted['複勝']) & set(actual['複勝'])),
+        'ワイド': len(set(map(tuple, map(sorted, predicted['ワイド']))) & set(map(tuple, map(sorted, actual['ワイド'])))),
+        '馬連': int(set(map(tuple, map(sorted, predicted['馬連']))) == set(map(tuple, map(sorted, actual['馬連'])))),
+        '馬単': int(set(map(tuple, predicted['馬単'])) == set(map(tuple, actual['馬単']))),
+        '3連複': int(set(map(tuple, map(sorted, predicted['3連複']))) == set(map(tuple, map(sorted, actual['3連複'])))),
+        '3連単': int(set(map(tuple, predicted['3連単'])) == set(map(tuple, actual['3連単'])))
+    }
+    return sum(hit.values())
 
 def generate_baken(order):
     # 着順が3未満の場合のエラーチェック
@@ -22,7 +34,7 @@ def generate_baken(order):
     fukusho = sorted(order[:3])
 
     # ワイド: 上位3頭の組み合わせ（順不同）
-    wide = [tuple(sorted(pair)) for pair in combinations(order[:3], 2)]
+    wide = [tuple(sorted(pair)) for pair in itertools.combinations(order[:3], 2)]
 
     # 馬連: 上位2頭の組み合わせ（順不同）
     umaren = [sorted(order[:2])]
@@ -46,45 +58,16 @@ def generate_baken(order):
         "3連単": sanrentan,
     }
 
-def baken_hit(predicted, actual):
-    hit = {
-        '単勝': int(predicted['単勝'] == actual['単勝']),
-        '複勝': len(set(predicted['複勝']) & set(actual['複勝'])),
-        'ワイド': len(set(map(tuple, map(sorted, predicted['ワイド']))) & set(map(tuple, map(sorted, actual['ワイド'])))),
-        '馬連': int(set(map(tuple, map(sorted, predicted['馬連']))) == set(map(tuple, map(sorted, actual['馬連'])))),
-        '馬単': int(set(map(tuple, predicted['馬単'])) == set(map(tuple, actual['馬単']))),
-        '3連複': int(set(map(tuple, map(sorted, predicted['3連複']))) == set(map(tuple, map(sorted, actual['3連複'])))),
-        '3連単': int(set(map(tuple, predicted['3連単'])) == set(map(tuple, actual['3連単'])))
-    }
-    return sum(hit.values())
-
-def process_race(df, df_shutsuba, breakpoints, bin_count=10):
-    race_dict = {}
+def process_race(df, df_shutsuba, prob):
     race_id = str(df.get_column("race_id")[0])
     race_date = str(df.get_column("race_date")[0])
-
-    # 各カラムのビンを生成し、カウントを更新
-    for col, breaks in breakpoints.items():
-        # ラベルを初期化
-        labels = [str(i) for i in range(bin_count)]
-        for i in labels:
-            race_dict[f"{col}_bin{i}"] = 0
-
-        # データをビンにカット
-        bins = df[col].cut(breaks, labels=labels)
-        for i in bins:
-            key = f"{col}_bin{i}"
-            race_dict[key] += 1
-
-    # 予測結果
-    result_prob = predict.result_prob(df_shutsuba)
 
     try:
         # 重複を削除
         df_filtered = df.unique(subset="name", keep="first").sort(by="horse_no")
 
         # 予測結果と実際の結果のデータフレームを作成
-        s_prob = pl.Series([v for k, v in sorted(result_prob.items())])
+        s_prob = pl.Series([v for k, v in sorted(prob.items())])
         df_results = df_filtered.select("horse_no", "result").with_columns(s_prob.alias("prob"))
     except:
         # デバッグ用の出力
@@ -95,14 +78,46 @@ def process_race(df, df_shutsuba, breakpoints, bin_count=10):
     # 馬券の予測
     df_sorted = df_results.sort(by='prob', descending=True)
     predicted = df_sorted.get_column("result").to_list()
-    actual = df_shutsuba.get_column("horse_no").to_list()
     baken_predicted = generate_baken(predicted)
+    
+    actual = df_shutsuba.get_column("horse_no").to_list()
     baken_actual = generate_baken(actual)
     
     # 馬券の的中数
     bakenhit = baken_hit(baken_predicted, baken_actual)
 
-    return race_dict, bakenhit, race_id, race_date
+    return bakenhit, race_id, race_date
+
+def use_columns_from_importance():
+    print(f"loading models/{config.bakenhit_lgb_reg.feature_importance_model}")
+    with open(f"models/{config.bakenhit_lgb_reg.feature_importance_model}", "rb") as f:
+        m = pickle.load(f)
+        importance = pl.DataFrame({
+            "column": m.feature_name(),
+            "importance": m.feature_importance(importance_type='gain')
+        }).sort(by="importance", descending=True)
+        importance_head = importance.head(config.bakenhit_lgb_reg.feature_importance_len)
+        print(importance_head)
+        use_columns = importance_head.get_column("column").to_list()
+    return use_columns
+
+def calc_breakpoints(df_x, bin_count):
+    if Path(config.breakpoint_file).exists():
+        print(f'loading {config.breakpoint_file}')
+        with open(config.breakpoint_file, "rb") as f:
+            breakpoints = pickle.load(f)
+    else:
+        print(f'calculating {config.breakpoint_file}')
+        breakpoints = {}
+
+        # 各カラムのヒストグラムのブレークポイントを計算
+        for col in tqdm(df_x.columns, desc="Calculating breakpoints for features"):
+            breakpoints[col] = df_x[col].hist(bin_count=bin_count)["breakpoint"].to_list()[:-1]
+        
+        with open(config.breakpoint_file, "wb") as f:
+            pickle.dump(breakpoints, f)
+        print(f'saved {config.breakpoint_file}')
+    return breakpoints
 
 def save_racefeat():
     print(f'loading {config.netkeiba_file}')
@@ -119,25 +134,12 @@ def save_racefeat():
     # 不要なカラムを除外して新しいデータフレームを作成
     df_x = df_feat.select(pl.exclude(config.NONEED_COLUMNS))
 
-    print(f"loading models/{config.bakenhit_lgb_reg.feature_importance_model}")
-    with open(f"models/{config.bakenhit_lgb_reg.feature_importance_model}", "rb") as f:
-        m = pickle.load(f)
-        importance = pl.DataFrame({
-            "column": m.feature_name(),
-            "importance": m.feature_importance(importance_type='gain')
-        }).sort(by="importance", descending=True)
-        importance_head = importance.head(config.bakenhit_lgb_reg.feature_importance_len)
-        print(importance_head)
-        use_columns = importance_head.get_column("column").to_list()
-
+    use_columns = use_columns_from_importance()
     df_x = df_x[use_columns]
+
     # ビンの数を設定
     bin_count = config.bakenhit_lgb_reg.bins
-    breakpoints = {}
-
-    # 各カラムのヒストグラムのブレークポイントを計算
-    for col in tqdm(df_x.columns, desc="Calculating breakpoints for features"):
-        breakpoints[col] = df_x[col].hist(bin_count=bin_count)["breakpoint"].to_list()[:-1]
+    breakpoints = calc_breakpoints(df_x, bin_count)
 
     # ジェネレータを使用してレースを処理
     group = df_feat.group_by(config.RACEDATE_COLUMNS)
@@ -157,7 +159,11 @@ def save_racefeat():
 
         df_shutsuba = df_netkeiba.filter(pl.col("race_id") == race_id)
 
-        race_dict, bakenhit, race_id, race_date = process_race(df, df_shutsuba, breakpoints, bin_count)
+        # 予測結果
+        result_prob = predict.result_prob(df)
+
+        race_dict = predict.bin_race_dict(df, breakpoints, bin_count)
+        bakenhit, race_id, race_date = process_race(df, df_shutsuba, result_prob)
         race_dict['race_id'] = race_id
         race_dict['race_date'] = race_date
         race_dict['bakenhit'] = bakenhit
@@ -185,18 +191,22 @@ if __name__ == "__main__":
         save_racefeat()
         
         # 全ての.featherファイルを読み込み、結合
-        print("Loading racefeat/*.feather")
+        print("Loadinlsg racefeat/*.feather")
         df_race = pl.scan_ipc("racefeat/*.feather").collect()
 
         print(f"Saving race features to {config.racefeat_file}.")
         df_race.write_ipc(config.racefeat_file)
         print(f"Successfully saved race features to {config.racefeat_file}.")
 
-    # 馬券の的中率を予測するｓ
+    # 馬券の的中率を予測する
+    import train
+
     df_race = df_race.to_pandas()
     bakenhit_config = config.bakenhit_lgb_reg
-    train_x = df_race.query(bakenhit_config.train).drop(columns=["race_id", "race_date"])
+    noneed = ["race_id", "race_date"] + config.NONEED_COLUMNS + config.RUNNING_COLUMNS
+    train_x = df_race.query(bakenhit_config.train).drop(columns=noneed, errors="ignore")
+    print("len(train_x): ", len(train_x))
     train_y = train_x.pop(bakenhit_config.target)
-    valid_x = df_race.query(bakenhit_config.valid).drop(columns=["race_id", "race_date" ])
+    valid_x = df_race.query(bakenhit_config.valid).drop(columns=noneed, errors="ignore")
     valid_y = valid_x.pop(bakenhit_config.target)
     train.lightgbm_model(bakenhit_config, train_x, train_y, valid_x, valid_y)

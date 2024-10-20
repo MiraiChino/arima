@@ -142,6 +142,7 @@ def load_models_and_configs(task_logs=[]):
     for model_config in config.l1_models:
         model_file = f"models/{model_config.file}"
         model_name = re_modelfile.match(model_file).groups()[0]
+        task_logs.append(f"loading {model_name}")
         if model_name not in l1_models:
             with open(model_file, "rb") as f:
                 if "kn" in model_name:
@@ -150,7 +151,6 @@ def load_models_and_configs(task_logs=[]):
                 else:
                     model = pickle.load(f)
                 l1_models[model_name] = model
-                task_logs.append(f"loaded {model_name}")
 
     if not l2_model:
         model_file = f"models/{config.l2_stacking_lgb_rank.file}"
@@ -168,7 +168,7 @@ def load_models_and_configs(task_logs=[]):
     if history is None:
         history = pl.read_ipc(config.feat_file)
 
-def result_prob(df, task_logs=[]):
+def search_df_feat(df, task_logs=[]):
     task_logs.append(f"encoding")
     df = df.with_columns(
         pl.lit(None).alias('tanno1'),
@@ -209,6 +209,7 @@ def result_prob(df, task_logs=[]):
     condition = [pl.col(column).is_in(df_encoded[column].to_list()) for column in feat_pattern.keys()]
     race_date = df_encoded["race_date"][0]
     hist = history.filter((pl.col('race_date') < race_date) & pl.any_horizontal(condition))
+    
     hist = hist.select([
         *df_encoded.columns,
         'avetime', 'aversrize',
@@ -235,6 +236,9 @@ def result_prob(df, task_logs=[]):
             df_feat = pd.concat([df_feat, df_agg])
     noneed_columns = [c for c in config.NONEED_COLUMNS if c in df_feat.columns]
     df_feat = df_feat.drop(columns=noneed_columns) # (16, 964)
+    return df_feat
+
+def result_prob(df_feat, task_logs=[]):
     task_logs.append(f"predict")
     preds = []
 
@@ -271,6 +275,53 @@ def result_prob(df, task_logs=[]):
     prob = probability(pred)
     task_logs.append(f"{l2_modelname}: {[f'{p*100:.1f}%' for p in probability(pred)]}")
     return {i: p for i, p in zip(df_feat["horse_no"].to_list(), prob)}
+
+def bin_race_dict(df_past, breakpoints, bin_count, task_logs=[]):
+    race_dict = {}
+    df_past = pl.DataFrame(df_past)
+    task_logs.append(f"df_past: {df_past}")
+
+    task_logs.append("calculating bins")
+    # 各カラムのビンを生成し、カウントを更新
+    for col, breaks in breakpoints.items():
+        # ラベルを初期化
+        labels = [str(i) for i in range(bin_count)]
+        for i in labels:
+            race_dict[f"{col}_bin{i}"] = 0
+
+        # データをビンにカット
+        bins = df_past[col].cut(breaks, labels=labels)
+        task_logs.append(f"bins: {bins}")
+        for i in bins:
+            key = f"{col}_bin{i}"
+            race_dict[key] += 1
+    task_logs.appenddd(f"df_past length: {len(df_past)}")
+    return race_dict
+
+def result_bakenhit(df_past, task_logs=[]):
+    task_logs.append(f'loading {config.breakpoint_file}')
+    with open(config.breakpoint_file, "rb") as f:
+        breakpoints = pickle.load(f)
+    lgbregprize = l1_models["lgbregprize"]
+    importance = pl.DataFrame({
+        "column": lgbregprize.feature_name(),
+        "importance": lgbregprize.feature_importance(importance_type='gain')
+    }).sort(by="importance", descending=True)
+    importance_head = importance.head(config.bakenhit_lgb_reg.feature_importance_len)
+    important_columns = importance_head.get_column("column").to_list()
+    noneed = ["race_id", "race_date"] + config.NONEED_COLUMNS + config.RUNNING_COLUMNS
+    df_past = df_past[important_columns].drop(columns=noneed, errors="ignore")
+    task_logs.append(f"len(df_past.columns): {len(df_past.columns)}")
+    race_dict = bin_race_dict(df_past, breakpoints, config.bakenhit_lgb_reg.bins, task_logs)
+    race_features_df = pl.DataFrame([race_dict])
+
+    task_logs.append(f'loading {config.bakenhit_lgb_reg.file}')
+    with open(config.bakenhit_lgb_reg.file, "rb") as f:
+        model = pickle.load(f)
+    values = race_features_df[model.feature_name()].values
+    pred = model.predict(values, num_iteration=model.best_iteration)
+    task_logs.append(f'bakenhit prob {pred}')
+    return pred
 
 def baken_prob(prob, names):
     baken = {
@@ -442,8 +493,11 @@ if __name__ == "__main__":
     df_original = df_horses.join(df_races, on='race_id', how='left')
     print(df_original)
     load_models_and_configs()  # モデルを事前にロード
-    p = result_prob(df_original)
+    df_feat = search_df_feat(df_original)
+    p = result_prob(df_feat)
     print(p)
+    bakenhit_prob = result_bakenhit(df_feat)
+    print(baken_prob)
     names = {no: name for no, name in zip(df_original["horse_no"].to_list(), df_original["name"].to_list())}
     baken = baken_prob(p, names)
     baken = calc_odds(baken, args.race_id, top=100)

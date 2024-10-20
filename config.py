@@ -13,6 +13,7 @@ avetime_file = f'avetime{from_date}_{to_date}.feather'
 aversrize_file = f'aversrize{from_date}_{to_date}.feather'
 rating_file = f'temp/rating{from_date}_{to_date}.feather'
 feat_file = f'feature{from_date}_{to_date}.feather'
+breakpoint_file = f'breakpoint{from_date}_{to_date}.pickle'
 racefeat_file = f'racefeat{from_date}_{to_date}.feather'
 
 NONEED_COLUMNS = [
@@ -26,6 +27,7 @@ NONEED_COLUMNS = [
     'last3frel', 'weightrel', 'penaltywgt', 'oddsrslt', \
     'horse_newr', 'jockey_newr', 'trainer_newr', 'score'
 ]
+RUNNING_COLUMNS = ["running", "running_style", "corner1_group", "corner2_group", "corner3_group", "corner4_group"]
 RACEDATE_COLUMNS = ['year', 'place_code', 'hold_num', 'day_num', 'race_num']
 
 ##### Train

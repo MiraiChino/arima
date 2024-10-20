@@ -86,13 +86,18 @@ class PredictBaken(Task):
             self.logs.append(f"scraped horse data")
             for no, name in zip(df["horse_no"].to_list(), df["name"].to_list()):
                 self.logs.append(f"{no}: {name}")
-            result_prob = predict.result_prob(df, task_logs=self.logs)
+            predict.load_models_and_configs(task_logs=self.logs)
+            df_feat = predict.search_df_feat(df, task_logs=self.logs)
+            result_prob = predict.result_prob(df_feat, task_logs=self.logs)
             names = {no: name for no, name in zip(df["horse_no"].to_list(), df["name"].to_list())}
             for no, name, p in zip(df["horse_no"].to_list(), df["name"].to_list(), result_prob.values()):
                 self.logs.append(f"{p*100:.2f}% {no}: {name}")
             baken = predict.baken_prob(result_prob, names)
+            self.logs.append(f"Predict bakenhit")
+            bakenhit_prob = predict.result_bakenhit(df_feat, task_logs=self.logs)
+
             with open(baken_pickle, 'wb') as f:
-                pickle.dump((baken, race_info), f)
+                pickle.dump((baken, bakenhit_prob, race_info), f)
             self.logs.append(f"{baken_pickle} saved")
             self.logs.append(f"<a href='{next_url}'>Go /create/{race_id}</a>")
             self.done()
@@ -109,7 +114,7 @@ class CreateBakenHTML(Task):
         baken_html = pathlib.Path(f"{race_id}.html")
         try:
             with open(f"{race_id}.predict", 'rb') as f:
-                baken, r = pickle.load(f)
+                baken, bakenhit_prob, r = pickle.load(f)
             self.logs.append(f"loaded {race_id}.predict")
         except Exception as e:
             self.logs.append(f"{traceback.format_exc()}")
@@ -127,6 +132,9 @@ class CreateBakenHTML(Task):
                 h3(f"{r.race_num}R {r.race_name}　{r.year}年{r.race_date} {netkeiba.PLACE[r.place_code]}"),
                 div(f"{r.start_time}発走 / {r.field}{r.distance}m ({r.turn}) / 天候:{r.weather} / 馬場:{r.field_condition}"),
                 div(f"{r.race_condition} / 本賞金:{r.prize1},{r.prize2},{r.prize3},{r.prize4},{r.prize5}万円"),
+                hr(),
+                div(f"馬券の的中率: {bakenhit_prob:.2%} "),
+                div(f"※予測トップ3の各馬券（単勝1枚,複勝3枚,ワイド3枚,馬連1枚,馬単1枚,3連複1枚,3連単1枚）計11枚を買ったときに当たる馬券枚数の期待値"),
                 hr(),
                 h3("単勝", _class="clear"),
                 baken["単勝"].df.to_html(classes='left'),

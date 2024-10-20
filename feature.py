@@ -248,8 +248,8 @@ def search_history(target_row, hist_pattern, feat_pattern, df):
             feat = np.empty(len(past_columns))
             feat[:] = np.nan
         else:
-            row = target_row + hist_target.select('^.*newr$').row(-1)
-            nphist_target = hist_target.select(pl.exclude('^.*newr$')).to_numpy()
+            row = target_row + hist_target.select('^.*newr$').row(-1) # 77=74+3
+            nphist_target = hist_target.select(pl.exclude('^.*newr$')).to_numpy() # 77=80-3
             nphist_target = np.append(nphist_target, [row], axis=0)
             feat = agg_history_i(
                 i=len(nphist_target)-1,
@@ -399,6 +399,7 @@ def mode(lst):
         return Counter(past_list).most_common(1)[0][0]
 
 def running_style(df):
+    df = pl.DataFrame(df)
     df_running_style =  (
         df
         .group_by("horse_id")

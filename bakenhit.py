@@ -1,5 +1,6 @@
 import pdb
 import pickle
+import pandas as pd
 import polars as pl
 from itertools import combinations
 from pathlib import Path
@@ -60,6 +61,7 @@ def baken_hit(predicted, actual):
 def process_race(df, df_shutsuba, breakpoints, bin_count=10):
     race_dict = {}
     race_id = str(df.get_column("race_id")[0])
+    race_date = str(df.get_column("race_date")[0])
 
     # 各カラムのビンを生成し、カウントを更新
     for col, breaks in breakpoints.items():
@@ -100,7 +102,7 @@ def process_race(df, df_shutsuba, breakpoints, bin_count=10):
     # 馬券の的中数
     bakenhit = baken_hit(baken_predicted, baken_actual)
 
-    return race_dict, bakenhit, race_id
+    return race_dict, bakenhit, race_id, race_date
 
 def save_racefeat():
     print(f'loading {config.netkeiba_file}')
@@ -124,11 +126,13 @@ def save_racefeat():
             "column": m.feature_name(),
             "importance": m.feature_importance(importance_type='gain')
         }).sort(by="importance", descending=True)
-        use_columns = importance.head(config.bakenhit_lgb_reg.feature_importance_len).get_column("column").to_list()
+        importance_head = importance.head(config.bakenhit_lgb_reg.feature_importance_len)
+        print(importance_head)
+        use_columns = importance_head.get_column("column").to_list()
 
     df_x = df_x[use_columns]
     # ビンの数を設定
-    bin_count = 10
+    bin_count = config.bakenhit_lgb_reg.bins
     breakpoints = {}
 
     # 各カラムのヒストグラムのブレークポイントを計算
@@ -142,6 +146,7 @@ def save_racefeat():
     # モデルをロード
     print("loading models")
     predict.load_models_and_configs()
+    schema = None
 
     for racedate, df in tqdm(group, total=total, desc="Processing races"):
         race_id = str(df.get_column("race_id")[0])
@@ -152,11 +157,25 @@ def save_racefeat():
 
         df_shutsuba = df_netkeiba.filter(pl.col("race_id") == race_id)
 
-        race_dict, bakenhit, race_id = process_race(df, df_shutsuba, breakpoints, bin_count)
+        race_dict, bakenhit, race_id, race_date = process_race(df, df_shutsuba, breakpoints, bin_count)
         race_dict['race_id'] = race_id
+        race_dict['race_date'] = race_date
         race_dict['bakenhit'] = bakenhit
         race_features_df = pl.DataFrame([race_dict])
-        race_features_df.write_ipc(feather_file)
+        if schema is None:
+            df_downcast = downcast(race_features_df)
+            schema = df_downcast.schema
+        else:
+            df_downcast = race_features_df.with_columns([pl.col(n).cast(t) for n, t in schema.items()])
+        df_downcast.write_ipc(feather_file)
+
+def downcast(df):
+    df_downcast = df.to_pandas().fillna(-1, downcast='infer')
+    fcols = df_downcast.select_dtypes('float').columns
+    icols = df_downcast.select_dtypes('integer').columns
+    df_downcast[fcols] = df_downcast[fcols].apply(pd.to_numeric, downcast='float')
+    df_downcast[icols] = df_downcast[icols].apply(pd.to_numeric, downcast='integer')
+    return pl.from_pandas(df_downcast)
 
 if __name__ == "__main__":
     if Path(config.racefeat_file).exists():
@@ -166,17 +185,18 @@ if __name__ == "__main__":
         save_racefeat()
         
         # 全ての.featherファイルを読み込み、結合
-        print("loading racefeat/*.feather")
+        print("Loading racefeat/*.feather")
         df_race = pl.scan_ipc("racefeat/*.feather").collect()
-        import pdb; pdb.set_trace()
-        df_race.write_ipc(config.racefeat_file)
-        print(f"Final race features saved to {config.racefeat_file}.")
 
-    # 馬券の的中率を予測する
+        print(f"Saving race features to {config.racefeat_file}.")
+        df_race.write_ipc(config.racefeat_file)
+        print(f"Successfully saved race features to {config.racefeat_file}.")
+
+    # 馬券の的中率を予測するｓ
     df_race = df_race.to_pandas()
     bakenhit_config = config.bakenhit_lgb_reg
-    train_x = df_race.query(bakenhit_config.train).drop(columns=["race_id"])
+    train_x = df_race.query(bakenhit_config.train).drop(columns=["race_id", "race_date"])
     train_y = train_x.pop(bakenhit_config.target)
-    valid_x = df_race.query(bakenhit_config.valid).drop(columns=["race_id"])
+    valid_x = df_race.query(bakenhit_config.valid).drop(columns=["race_id", "race_date" ])
     valid_y = valid_x.pop(bakenhit_config.target)
     train.lightgbm_model(bakenhit_config, train_x, train_y, valid_x, valid_y)

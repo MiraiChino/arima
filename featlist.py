@@ -22,10 +22,37 @@ def diff(col1, col2):
         return ((history[:, index(col1)] - history[:, index(col2)]) / history[:, index(col2)]).mean()
     return wrapper
 
-def same_ave(*same_columns, target="prize"):
+def same_ave(*same_columns, target="prize", last=None):
     def wrapper(history, now, index):
+        if len(history) <= 0:
+            return 0
+        
         i1 = index(target)
         same_conditions = [(history[:, index(c)] == now[index(c)]) for c in same_columns]
+
+        # lastに列名が入っていたら、その列名は最後のレースの列の値を使う
+        if last:
+            last_race = history[0]
+            last_race_value = last_race[index(last)]
+            same_conditions += (history[:, index(last)] == last_race_value)
+
+        same_hist = history[np.logical_and.reduce(same_conditions)]
+        if same_hist.any():
+            prizes = same_hist[:, i1]
+            return prizes.mean()
+        else:
+            return 0
+    return wrapper
+
+def last_same_ave(*same_columns, target="prize"):
+    def wrapper(history, now, index):
+        i1 = index(target)
+        # historyの最初の行（過去の最後のレース）を取得
+        if len(history) <= 0:
+            return 0
+        last_race = history[0]
+        # 最初の行の値と同じ条件を作成
+        same_conditions = [(history[:, index(c)] == last_race[index(c)]) for c in same_columns]
         same_hist = history[np.logical_and.reduce(same_conditions)]
         if same_hist.any():
             prizes = same_hist[:, i1]
@@ -60,10 +87,15 @@ def distance_prize():
         return np.mean(dprizes)
     return wrapper
 
-def same_drize(*same_columns):
+def same_drize(*same_columns, last=None):
     def wrapper(history, now, index):
         i1 = index("distance")
         same_conditions = [(history[:, index(c)] == now[index(c)]) for c in same_columns]
+        # lastに列名が入っていたら、その列名は最後のレースの列の値を使う
+        if last:
+            last_race = history[0]
+            last_race_value = last_race[index(last)]
+            same_conditions += (history[:, index(last)] == last_race_value)
         same_hist = history[np.logical_and.reduce(same_conditions)]
         if same_hist.any():
             distances = same_hist[:, i1]
@@ -72,6 +104,36 @@ def same_drize(*same_columns):
             return np.mean(dprizes)
         else:
             return 0
+    return wrapper
+
+def last_same_drize(*same_columns):
+    def wrapper(history, now, index):
+        i1 = index("distance")
+        # historyの最初の行（過去の最後のレース）を取得
+        if len(history) <= 0:
+            return 0
+        last_race = history[0]
+        same_conditions = [(history[:, index(c)] == last_race[index(c)]) for c in same_columns]
+        same_hist = history[np.logical_and.reduce(same_conditions)]
+        if same_hist.any():
+            distances = same_hist[:, i1]
+            prizes = same_hist[:, index("prize")]
+            dprizes = np.vectorize(drize)(distances, prizes, now[i1])
+            return np.mean(dprizes)
+        else:
+            return 0
+    return wrapper
+
+def most_frequent(column):
+    def wrapper(history, now, index):
+        # 指定された列のインデックスを取得
+        col_index = index(column)
+        # 履歴データから指定された列の値を取得
+        values = history[:, col_index]
+        # 最も頻度の高い値を計算
+        unique, counts = np.unique(values, return_counts=True)
+        most_frequent_value = unique[np.argmax(counts)]
+        return most_frequent_value
     return wrapper
 
 hist_pattern = [1, 2, 3, 6, 12, 999999] # months
@@ -99,6 +161,9 @@ feature_pattern = {
             "horse_weightrel": ave("weightrel"),
             "horse_penaltywgt": ave("penaltywgt"),
             "horse_oddsrslt": ave("oddsrslt"),
+            "horse_running_style": most_frequent("running"),
+            "horse_corner4_group": most_frequent("corner4_group"),
+            "horse_corner3_group": most_frequent("corner3_group"),
             "horse_r": ave("horse_oldr"),
             "horse_tan": ave("tanshou"),
             "horse_huku": ave("hukushou"),
@@ -128,20 +193,20 @@ feature_pattern = {
             "horse_fcdrize": same_drize("field", "field_condition"),
             "horse_pfdrize": same_drize("place_code", "field"),
             "horse_pftdrize": same_drize("place_code", "field", "turn"),
-            "horse_rprize": same_ave("running_style", target="prize"),
-            "horse_rdprize": same_ave("running_style", "distance", target="prize"),
-            "horse_rgprize": same_ave("running_style", "gate", target="prize"),
-            "horse_rgtprize": same_ave("running_style", "gate", "turn", target="prize"),
-            "horse_rpprize": same_ave("running_style", "place_code", target="prize"),
-            "horse_rjprize": same_ave("running_style", "jockey", target="prize"),
-            "horse_rdpprize": same_ave("running_style", "distance", "place_code", target="prize"),
-            "horse_rdgprize": same_ave("running_style", "distance", "gate", target="prize"),
-            "horse_rdgtprize": same_ave("running_style", "distance", "gate", "turn", target="prize"),
-            "horse_rdrize": same_drize("running_style"),
-            "horse_rgdrize": same_drize("running_style", "gate"),
-            "horse_rgtdrize": same_drize("running_style", "gate", "turn"),
-            "horse_rpdrize": same_drize("running_style", "place_code"),
-            "horse_rjdrize": same_drize("running_style", "jockey"),
+            "horse_rprize": last_same_ave("running_style", target="prize"),
+            "horse_rdprize": same_ave("distance", target="prize", last="running_style"),
+            "horse_rgprize": same_ave("gate", target="prize", last="running_style"),
+            "horse_rgtprize": same_ave("gate", "turn", target="prize", last="running_style"),
+            "horse_rpprize": same_ave("place_code", target="prize", last="running_style"),
+            "horse_rjprize": same_ave("jockey", target="prize", last="running_style"),
+            "horse_rdpprize": same_ave("distance", "place_code", target="prize", last="running_style"),
+            "horse_rdgprize": same_ave("distance", "gate", target="prize", last="running_style"),
+            "horse_rdgtprize": same_ave("distance", "gate", "turn", target="prize", last="running_style"),
+            "horse_rdrize": last_same_drize("running_style"),
+            "horse_rgdrize": same_drize("gate", last="running_style"),
+            "horse_rgtdrize": same_drize("gate", "turn", last="running_style"),
+            "horse_rpdrize": same_drize("place_code", last="running_style"),
+            "horse_rjdrize": same_drize("jockey", last="running_style"),
         },
     },
     "jockey_id": {
@@ -162,6 +227,9 @@ feature_pattern = {
             "jockey_penaltyrel": ave("penaltyrel"),
             "jockey_penaltywgt": ave("penaltywgt"),
             "jockey_oddsrslt": ave("oddsrslt"),
+            "jockery_running_style": most_frequent("running"),
+            "jockery_corner4_group": most_frequent("corner4_group"),
+            "jockery_corner3_group": most_frequent("corner3_group"),
             "jockey_r": ave("jockey_oldr"),
             "jockey_tan": ave("tanshou"),
             "jockey_huku": ave("hukushou"),
@@ -185,18 +253,20 @@ feature_pattern = {
             "jockey_dfcprize": same_ave("distance", "field", "field_condition", target="prize"),
             "jockey_pfdcprize": same_ave("place_code", "field", "distance", "field_condition", target="prize"),
             "jockey_pfdtprize": same_ave("place_code", "field", "distance", "turn", target="prize"),
-            "jockey_rprize": same_ave("running_style", target="prize"),
-            "jockey_rdprize": same_ave("running_style", "distance", target="prize"),
-            "jockey_rgprize": same_ave("running_style", "gate", target="prize"),
-            "jockey_rgtprize": same_ave("running_style", "gate", "turn", target="prize"),
-            "jockey_rpprize": same_ave("running_style", "place_code", target="prize"),
-            "jockey_rdpprize": same_ave("running_style", "distance", "place_code", target="prize"),
-            "jockey_rdgprize": same_ave("running_style", "distance", "gate", target="prize"),
-            "jockey_rdgtprize": same_ave("running_style", "distance", "gate", "turn", target="prize"),
-            "jockey_rdrize": same_drize("running_style"),
-            "jockey_rgdrize": same_drize("running_style", "gate"),
-            "jockey_rgtdrize": same_drize("running_style", "gate", "turn"),
-            "jockey_rpdrize": same_drize("running_style", "place_code"),
+            "jockey_rprize": last_same_ave("running_style", target="prize"),
+            "jockey_rdprize": same_ave("distance", target="prize", last="running_style"),
+            "jockey_rgprize": same_ave("gate", target="prize", last="running_style"),
+            "jockey_rgtprize": same_ave("gate", "turn", target="prize", last="running_style"),
+            "jockey_rpprize": same_ave("place_code", target="prize", last="running_style"),
+            "jockey_rjprize": same_ave("jockey", target="prize", last="running_style"),
+            "jockey_rdpprize": same_ave("distance", "place_code", target="prize", last="running_style"),
+            "jockey_rdgprize": same_ave("distance", "gate", target="prize", last="running_style"),
+            "jockey_rdgtprize": same_ave("distance", "gate", "turn", target="prize", last="running_style"),
+            "jockey_rdrize": last_same_drize("running_style"),
+            "jockey_rgdrize": same_drize("gate", last="running_style"),
+            "jockey_rgtdrize": same_drize("gate", "turn", last="running_style"),
+            "jockey_rpdrize": same_drize("place_code", last="running_style"),
+            "jockey_rjdrize": same_drize("jockey", last="running_style"),
         },
     },
     "trainer_id": {
@@ -217,6 +287,9 @@ feature_pattern = {
             "trainer_weightrel": ave("weightrel"),
             "trainer_penaltywgt": ave("penaltywgt"),
             "trainer_oddsrslt": ave("oddsrslt"),
+            "trainer_running_style": most_frequent("running"),
+            "trainer_corner4_group": most_frequent("corner4_group"),
+            "trainer_corner3_group": most_frequent("corner3_group"),
             "trainer_r": ave("trainer_oldr"),
             "trainer_tan": ave("tanshou"),
             "trainer_huku": ave("hukushou"),
@@ -236,18 +309,20 @@ feature_pattern = {
             "trainer_pfcprize": same_ave("place_code", "field", "field_condition", target="prize"),
             "trainer_dfcprize": same_ave("distance", "field", "field_condition", target="prize"),
             "trainer_pfdcprize": same_ave("place_code", "field", "distance", "field_condition", target="prize"),
-            "trainer_rprize": same_ave("running_style", target="prize"),
-            "trainer_rdprize": same_ave("running_style", "distance", target="prize"),
-            "trainer_rgprize": same_ave("running_style", "gate", target="prize"),
-            "trainer_rgtprize": same_ave("running_style", "gate", "turn", target="prize"),
-            "trainer_rpprize": same_ave("running_style", "place_code", target="prize"),
-            "trainer_rdpprize": same_ave("running_style", "distance", "place_code", target="prize"),
-            "trainer_rdgprize": same_ave("running_style", "distance", "gate", target="prize"),
-            "trainer_rdgtprize": same_ave("running_style", "distance", "gate", "turn", target="prize"),
-            "trainer_rdrize": same_drize("running_style"),
-            "trainer_rgdrize": same_drize("running_style", "gate"),
-            "trainer_rgtdrize": same_drize("running_style", "gate", "turn"),
-            "trainer_rpdrize": same_drize("running_style", "place_code"),
+            "trainer_rprize": last_same_ave("running_style", target="prize"),
+            "trainer_rdprize": same_ave("distance", target="prize", last="running_style"),
+            "trainer_rgprize": same_ave("gate", target="prize", last="running_style"),
+            "trainer_rgtprize": same_ave("gate", "turn", target="prize", last="running_style"),
+            "trainer_rpprize": same_ave("place_code", target="prize", last="running_style"),
+            "trainer_rjprize": same_ave("jockey", target="prize", last="running_style"),
+            "trainer_rdpprize": same_ave("distance", "place_code", target="prize", last="running_style"),
+            "trainer_rdgprize": same_ave("distance", "gate", target="prize", last="running_style"),
+            "trainer_rdgtprize": same_ave("distance", "gate", "turn", target="prize", last="running_style"),
+            "trainer_rdrize": last_same_drize("running_style"),
+            "trainer_rgdrize": same_drize("gate", last="running_style"),
+            "trainer_rgtdrize": same_drize("gate", "turn", last="running_style"),
+            "trainer_rpdrize": same_drize("place_code", last="running_style"),
+            "trainer_rjdrize": same_drize("jockey", last="running_style"),
         },
     },
 }

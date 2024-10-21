@@ -9,13 +9,11 @@ import polars as pl
 from loguru import logger
 from torch.utils.tensorboard import SummaryWriter
 from lightgbm import Dataset
-from catboost import Pool
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import LassoCV, SGDRegressor
+from sklearn.linear_model import LassoCV, SGDRegressor, ARDRegression, HuberRegressor, BayesianRidge, ElasticNet
 from sklearn.preprocessing import StandardScaler
+from sklearn.tree import ExtraTreeRegressor
 
 import config
-from knn import UsearchKNeighborsRegressor
 
 
 class LogSummaryWriterCallback:
@@ -104,21 +102,17 @@ def save_model(model, model_file):
     logger.info(f'Model saved to {model_file}')
 
 
-def train_model(model_class, train_x, train_y, params, use_scaler=False):
+def train_model(model_class, train_x, train_y, params, scaler=None):
     logger.info(f'Starting training for model: {model_class.__name__} with params {params}')
 
     model = model_class(**params)
-    scaler = None
-    if use_scaler:
-        logger.info('Using StandardScaler for feature scaling')
-        scaler = StandardScaler()
-        scaler.fit(train_x)
+    if scaler:
         logger.info('Scaling comlete for feature')
         model.fit(scaler.transform(train_x), train_y)
     else:
         model.fit(train_x, train_y)
     logger.info(f'Training complete for model: {model_class.__name__}')
-    return model, scaler
+    return model
 
 def lgb(df, config, reg=False):
     logger.info(f'model: {config}')
@@ -156,7 +150,7 @@ def lightgbm_model(config, train_x, train_y, valid_x, valid_y, train_query=None,
         save_model(model, model_file)
     return model
 
-def randomforest_regression(df, config):
+def regression(model_class, df, config, scaler=None):
     logger.info(f'model: {config}')
     train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df, config)
     model_file = Path(f'models/{config.file}')
@@ -164,37 +158,7 @@ def randomforest_regression(df, config):
     if model_file.exists():
         model = load_model(model_file)
     else:
-        model, _ = train_model(RandomForestRegressor, train_x, train_y, config.params)
-        save_model(model, model_file)
-
-    logger.info('Predicting on validation set...')
-    pred_valid_x = model.predict(valid_x)
-    return model, pred_valid_x
-
-def sgd_regression(df, config):
-    logger.info(f'model: {config}')
-    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df, config)
-    model_file = Path(f'models/{config.file}')
-
-    if model_file.exists():
-        model, scaler = load_model(model_file)
-    else:
-        model, scaler = train_model(SGDRegressor, train_x, train_y, config.params, use_scaler=True)
-        save_model((model, scaler), model_file)
-
-    logger.info('Predicting on validation set...')
-    pred_valid_x = model.predict(scaler.transform(valid_x))
-    return model, scaler, pred_valid_x
-
-def lasso_regression(df, config):
-    logger.info(f'model: {config}')
-    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df, config)
-    model_file = Path(f'models/{config.file}')
-
-    if model_file.exists():
-        model = load_model(model_file)
-    else:
-        model, _ = train_model(LassoCV, train_x, train_y, config.params)
+        model, _ = train_model(model_class, train_x, train_y, config.params, scaler)
         save_model(model, model_file)
 
     logger.info('Predicting on validation set...')
@@ -233,10 +197,6 @@ if __name__ == "__main__":
     df_feat['prizeper'] = df_feat['prize'].map(percent_prize(lower9, middle9, upper9))
 
     l2_valid_x, l2_valid_y, l2_valid_query = prepare_dataset(df_feat.query(config.l2_stacking_lgb_rank.valid), target=config.l2_stacking_lgb_rank.target)
-    catfeatures_indices = [l2_valid_x.columns.get_loc(c) for c in config.cat_features if c in l2_valid_x]
-    l2_valid_x_fillna = l2_valid_x.copy()
-    l2_valid_x_fillna.iloc[:, catfeatures_indices] = l2_valid_x_fillna.iloc[:, catfeatures_indices].fillna(-1).astype(int)
-    l2_valid = Pool(data=l2_valid_x_fillna, label=l2_valid_y, group_id=l2_valid_x['race_id'].tolist(), cat_features=catfeatures_indices)
 
     ## Layer 1
     predicted_l1_valid_xs = []
@@ -267,31 +227,60 @@ if __name__ == "__main__":
     l1_preds_i.append(l1_pred)
     l2_preds_i.append(l2_pred)
 
-    # Layer 1: RandomForest Regression
-    logger.info(f'--- Layer 1: RandomForest Regression ---')
-    rf_regression, l1_pred = randomforest_regression(df=df_feat, config=config.l1_rf_regression)
-    l2_pred = rf_regression.predict(l2_valid_x)
-    l1_preds_i.append(l1_pred)
-    l2_preds_i.append(l2_pred)
+    # Scaler
+    logger.info(f'--- Scaler ---')
+    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df_feat, config.l1_sgd_regression)
+    scaler = StandardScaler()
+    scaler.fit(train_x)
+    scaled_l2_valid_x = scaler.transform(l2_valid_x)
+    save_model(scaler, Path(f'models/{config.scaler_file}'))
 
     # Layer 1: SGD Regressor
     logger.info(f'--- Layer 1: SGD Regressor ---')
-    sgd_regression, sgd_scaler, l1_pred = sgd_regression(df=df_feat, config=config.l1_sgd_regression)
-    l2_pred = sgd_regression.predict(sgd_scaler.transform(l2_valid_x))
+    sgd_regression, l1_pred = regression(SGDRegressor, df=df_feat, config=config.l1_sgd_regression, scaler=scaler)
+    l2_pred = sgd_regression.predict(scaled_l2_valid_x)
     l1_preds_i.append(l1_pred)
     l2_preds_i.append(l2_pred)
 
     # Layer 1: Lasso Regression
     logger.info(f'--- Layer 1: Lasso Regression ---')
-    lasso, l1_pred = lasso_regression(df=df_feat, config=config.l1_lasso_regression)
-    l2_pred = lasso.predict(l2_valid_x)
+    lasso, l1_pred = regression(LassoCV, df=df_feat, config=config.l1_lasso_regression, scaler=scaler)
+    l2_pred = lasso.predict(scaled_l2_valid_x)
     l1_preds_i.append(l1_pred)
     l2_preds_i.append(l2_pred)
 
-    # Layer 1: KNeighbors Regression
-    logger.info(f'--- Layer 1: KNeighbors Regression ---')
-    kn_regression, l1_pred = kneighbors_regression(df=df_feat, config=config.l1_kn_regression)
-    l2_pred = kn_regression.predict(l2_valid_x)
+    # Layer1: ARD Regression
+    logger.info(f'--- Layer 1: ARD Regression ---')
+    ard, l1_pred = regression(ARDRegression, df=df_feat, config=config.l1_ard_regression, scaler=scaler)
+    l2_pred = ard.predict(scaled_l2_valid_x)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
+
+    # Layer1: Huber Regression
+    logger.info(f'--- Layer 1: Huber Regression ---')
+    huber, l1_pred = regression(HuberRegressor, df=df_feat, config=config.l1_huber_regression, scaler=scaler)
+    l2_pred = huber.predict(scaled_l2_valid_x)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
+
+    # Layer 1: BayesianRidge Regression
+    logger.info(f'--- Layer 1: BayesianRidge Regression ---')
+    bayesian_ridge, l1_pred = regression(BayesianRidge, df=df_feat, config=config.l1_br_regression, scaler=scaler)
+    l2_pred = bayesian_ridge.predict(scaled_l2_valid_x)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
+
+    # Layer 1: ExtraTreeRegressor
+    logger.info(f'--- Layer 1: ExtraTreeRegressor ---')
+    extra_tree, l1_pred = regression(ExtraTreeRegressor, df=df_feat, config=config.l1_etr_regression)
+    l2_pred = extra_tree.predict(l2_valid_x)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
+
+    # Layer 1: ElasticNet
+    logger.info(f'--- Layer 1: ElasticNet ---')
+    elasticnet, l1_pred = regression(ElasticNet, df=df_feat, config=config.l1_en_regression, scaler=scaler)
+    l2_pred = elasticnet.predict(scaled_l2_valid_x)
     l1_preds_i.append(l1_pred)
     l2_preds_i.append(l2_pred)
 

@@ -2,7 +2,7 @@ from addict import Dict
 
 # scraping
 from_date = '2008-01'
-to_date = '2024-08'
+to_date = '2024-10'
 netkeiba_horse_file = f'temp/netkeiba{from_date}_{to_date}.horses.feather'
 netkeiba_race_file = f'temp/netkeiba{from_date}_{to_date}.races.feather'
 netkeiba_file = f'temp/netkeiba{from_date}_{to_date}.feather'
@@ -25,9 +25,9 @@ NONEED_COLUMNS = [
     'huku1', 'huku2', 'huku3', 'wide1', 'wide2', 'wide3', 'ren', \
     'uma1', 'uma2', 'puku', 'san1', 'san2', \
     'last3frel', 'weightrel', 'penaltywgt', 'oddsrslt', \
-    'horse_newr', 'jockey_newr', 'trainer_newr', 'score'
+    'running', 'running_style', 'corner1_group', 'corner2_group', 'corner3_group', 'corner4_group', \
+    'horse_newr', 'jockey_newr', 'trainer_newr', 'score' 
 ]
-RUNNING_COLUMNS = ["running", "running_style", "corner1_group", "corner2_group", "corner3_group", "corner4_group"]
 RACEDATE_COLUMNS = ['year', 'place_code', 'hold_num', 'day_num', 'race_num']
 
 ##### Train
@@ -42,9 +42,7 @@ dataset_query = Dict(
     valid="'2022-01-01' <= race_date <= '2024-12-31'",
 )
 
-# category features
-cat_features = ['name', 'horse_id', 'sex', 'jockey', 'jockey_id', 'trainer','trainer_id',
-                'race_id', 'field', 'turn', 'weather', 'field_condition', 'race_condition', 'place_code']
+scaler_file = f'scaler_{from_date}_{to_date}.pickle'
 
 # Layer1: LightGBM LambdaRank Prize
 l1_lgb_rank_prize = Dict(
@@ -92,19 +90,6 @@ l1_lgb_regression = Dict(
     }
 )
 
-# Layer1: RandomForest Regression
-l1_rf_regression = Dict(
-    train=dataset_query.layer1_train,
-    valid=dataset_query.layer1_valid,
-    file=f'rfregprize_{from_date}_{to_date}.pickle',
-    target='prizeper',
-    params={
-        'n_estimators': 100,
-        'n_jobs': -1,
-        'verbose': 0,
-    }
-)
-
 # Layer1: SGDRegressor
 l1_sgd_regression = Dict(
     train=dataset_query.layer1_train,
@@ -130,24 +115,68 @@ l1_lasso_regression = Dict(
     }
 )
 
-# Layer1: KNeighbors Regression
-l1_kn_regression = Dict(
+# Layer1: ARD Regression
+l1_ard_regression = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
-    file=f'knprize_{from_date}_{to_date}.pickle',
+    file=f'ardprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
-        'k': 5,
+        'verbose': False,
     }
 )
+
+# Layer1: Huber Regression
+l1_huber_regression = Dict(
+    train=dataset_query.layer1_train,
+    valid=dataset_query.layer1_valid,
+    file=f'huberprize_{from_date}_{to_date}.pickle',
+    target='prizeper',
+    params={
+    }
+)
+
+# Layer1: BayesianRidge Regression
+l1_br_regression = Dict(
+    train=dataset_query.layer1_train,
+    valid=dataset_query.layer1_valid,
+    file=f'brprize_{from_date}_{to_date}.pickle',
+    target='prizeper',
+    params={
+    }
+)
+
+# Layer1: ExtraTreeRegressor
+l1_etr_regression = Dict(
+    train=dataset_query.layer1_train,
+    valid=dataset_query.layer1_valid,
+    file=f'etrprize_{from_date}_{to_date}.pickle',
+    target='prizeper',
+    params={
+    }
+)
+
+# Layer1: ElasticNet
+l1_en_regression = Dict(
+    train=dataset_query.layer1_train,
+    valid=dataset_query.layer1_valid,
+    file=f'enprize_{from_date}_{to_date}.pickle',
+    target='prizeper',
+    params={
+    }
+)
+
 l1_models = [
     l1_lgb_rank_prize,
     l1_lgb_rank_score,
     l1_lgb_regression,
-    l1_rf_regression,
     l1_sgd_regression,
     l1_lasso_regression,
-    l1_kn_regression
+    l1_ard_regression,
+    l1_huber_regression,
+    l1_br_regression,
+    l1_etr_regression,
+    l1_en_regression,
 ]
 
 # Layer2: Stacking model: LightGBM LambdaRank

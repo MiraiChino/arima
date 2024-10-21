@@ -16,8 +16,8 @@ import config
 import featlist
 import feature
 import netkeiba
-from knn import UsearchKNeighborsRegressor
 
+scaler = None
 l1_models = {}
 l2_modelname, l2_model = None, None
 re_modelfile = re.compile(r"^models/(.*)_\d+.*_\d+.*$")
@@ -136,28 +136,7 @@ def min_bet(odds, max_return=100000):
     return []
 
 def load_models_and_configs(task_logs=[]):
-    global l1_models, l2_modelname, l2_model, horse_encoder, history, hist_pattern, feat_pattern
-
-    task_logs.append(f"loading models")
-    for model_config in config.l1_models:
-        model_file = f"models/{model_config.file}"
-        model_name = re_modelfile.match(model_file).groups()[0]
-        task_logs.append(f"loading {model_name}")
-        if model_name not in l1_models:
-            with open(model_file, "rb") as f:
-                if "kn" in model_name:
-                    model = UsearchKNeighborsRegressor()
-                    model.load(model_file)
-                else:
-                    model = pickle.load(f)
-                l1_models[model_name] = model
-
-    if not l2_model:
-        model_file = f"models/{config.l2_stacking_lgb_rank.file}"
-        l2_modelname = re_modelfile.match(model_file).groups()[0]
-        with open(model_file, "rb") as f:
-            l2_model = pickle.load(f)
-            task_logs.append(f"loaded {l2_modelname}")
+    global scaler, l1_models, l2_modelname, l2_model, horse_encoder, history, hist_pattern, feat_pattern
 
     task_logs.append(f"loading {config.encoder_file}")
     if horse_encoder is None:
@@ -167,6 +146,27 @@ def load_models_and_configs(task_logs=[]):
     task_logs.append(f"loading {config.feat_file}")
     if history is None:
         history = pl.read_ipc(config.feat_file)
+
+    task_logs.append(f"loading scaler")
+    with open(config.scaler_file, "rb") as f:
+        scaler = pickle.load(f)
+
+    task_logs.append(f"loading models")
+    for model_config in config.l1_models:
+        model_file = f"models/{model_config.file}"
+        model_name = re_modelfile.match(model_file).groups()[0]
+        task_logs.append(f"loading {model_name}")
+        if model_name not in l1_models:
+            with open(model_file, "rb") as f:
+                model = pickle.load(f)
+                l1_models[model_name] = model
+
+    if not l2_model:
+        model_file = f"models/{config.l2_stacking_lgb_rank.file}"
+        l2_modelname = re_modelfile.match(model_file).groups()[0]
+        with open(model_file, "rb") as f:
+            l2_model = pickle.load(f)
+            task_logs.append(f"loaded {l2_modelname}")
 
 def search_df_feat(df, task_logs=[]):
     task_logs.append(f"encoding")
@@ -181,12 +181,12 @@ def search_df_feat(df, task_logs=[]):
         pl.lit(None).alias('huku1'),
         pl.lit(None).alias('huku2'),
         pl.lit(None).alias('huku3'),
-        pl.lit(None).alias('corner1_group'),
-        pl.lit(None).alias('corner2_group'),
-        pl.lit(None).alias('corner3_group'),
-        pl.lit(None).alias('corner4_group'),
-        pl.lit(None).alias('running'),
-        pl.lit(None).alias('running_style').cast(pl.Int8),
+        # pl.lit(None).alias('corner1_group'),
+        # pl.lit(None).alias('corner2_group'),
+        # pl.lit(None).alias('corner3_group'),
+        # pl.lit(None).alias('corner4_group'),
+        # pl.lit(None).alias('running'),
+        # pl.lit(None).alias('running_style').cast(pl.Int8),
         pl.col("race_id").count().over("race_id").alias("num_horses"),
         pl.col('corner').cast(str),
         pl.col('last3f').cast(float),
@@ -216,6 +216,7 @@ def search_df_feat(df, task_logs=[]):
         'horse_oldr', 'jockey_oldr', 'trainer_oldr',
         'horse_newr', 'jockey_newr', 'trainer_newr',
     ])
+    # horse_running_style => running_styleとして推定する
 
     # avetime
     race_condition = ['field', 'distance', 'field_condition']
@@ -226,7 +227,7 @@ def search_df_feat(df, task_logs=[]):
     race_condition = ['running_style', 'field', 'distance', 'field_condition', 'place_code', 'gate', 'turn']
     aversrize = hist.select([*race_condition, 'aversrize']).unique(subset=[*race_condition, 'aversrize'])
     df_encoded = df_encoded.join(aversrize, on=race_condition, how='left')
-    
+
     df_feat = pd.DataFrame()
     for row in df_encoded.rows():
         df_agg = feature.search_history(row, hist_pattern, feat_pattern, hist)
@@ -250,17 +251,26 @@ def result_prob(df_feat, task_logs=[]):
                 values = df_feat[model.feature_name()].values
                 pred = model.predict(values, num_iteration=model.best_iteration)
             elif "sgd" in model_name:
-                df_feat = df_feat.fillna(0)
-                model, scaler = model
-                df_feat = df_feat[scaler.feature_names_in_]
+                df_feat = df_feat.fillna(0)[model.feature_names_in_]
                 pred = model.predict(scaler.transform(df_feat))
             elif "rf" in model_name:
                 pred = model.predict(df_feat[model.feature_names_in_])
-            elif "lasso" in model_name:
+            elif "ard" in model_name:
+                df_feat = df_feat[model.feature_names_in_]
+                pred = model.predict(scaler.transform(df_feat))
+            elif "huber" in model_name:
+                df_feat = df_feat[model.feature_names_in_]
+                pred = model.predict(scaler.transform(df_feat))
+            elif "br" in model_name:
+                df_feat = df_feat[model.feature_names_in_]
+                pred = model.predict(scaler.transform(df_feat))
+            elif "etr" in model_name:
                 df_feat = df_feat[model.feature_names_in_]
                 pred = model.predict(df_feat)
-            elif "kn" in model_name:
-                pred = model.predict(df_feat)
+            elif "en" in model_name:
+                df_feat = df_feat[model.feature_names_in_]
+                pred = model.predict(scaler.transform(df_feat))
+            
         except:
             import traceback; print(traceback.format_exc())
             import pdb; pdb.set_trace()
@@ -284,6 +294,9 @@ def bin_race_dict(df_past, breakpoints, bin_count, task_logs=[]):
     task_logs.append("calculating bins")
     # 各カラムのビンを生成し、カウントを更新
     for col, breaks in breakpoints.items():
+        if col in ["race_id", "race_date"] + config.NONEED_COLUMNS:
+            continue
+        
         # ラベルを初期化
         labels = [str(i) for i in range(bin_count)]
         for i in labels:
@@ -309,7 +322,7 @@ def result_bakenhit(df_past, task_logs=[]):
     }).sort(by="importance", descending=True)
     importance_head = importance.head(config.bakenhit_lgb_reg.feature_importance_len)
     important_columns = importance_head.get_column("column").to_list()
-    noneed = ["race_id", "race_date"] + config.NONEED_COLUMNS + config.RUNNING_COLUMNS
+    noneed = ["race_id", "race_date"] + config.NONEED_COLUMNS
     df_past = df_past[important_columns].drop(columns=noneed, errors="ignore")
     task_logs.append(f"len(df_past.columns): {len(df_past.columns)}")
     race_dict = bin_race_dict(df_past, breakpoints, config.bakenhit_lgb_reg.bins, task_logs)

@@ -95,7 +95,7 @@ def agg_history_i(i, f_byrace, f_bymonth, hist_pattern, history, index, mo=timed
     hist_race = history[:, index('race_date')]
     now_race = row[index('race_date')]
     past_days = now_race - hist_race
-    past_hist = history[np.where(hist_race < now_race)][::-1]
+    past_hist = history[np.where(hist_race < now_race)][::-1] # 新しい順
     zero_m = timedelta(days=0)
     if past_hist.any():
         try:

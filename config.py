@@ -97,8 +97,6 @@ l1_sgd_regression = Dict(
     file=f'sgdrprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
-        'max_iter': 10000,
-        'learning_rate': 'adaptive',
         'verbose': 0,
     }
 )

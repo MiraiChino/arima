@@ -12,6 +12,7 @@ from lightgbm import Dataset
 from sklearn.linear_model import LassoCV, SGDRegressor, ARDRegression, HuberRegressor, BayesianRidge, ElasticNet
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import ExtraTreeRegressor
+from sklearn.metrics import ndcg_score, mean_squared_error
 
 import config
 
@@ -123,8 +124,27 @@ def lgb(df, config, reg=False):
     else:
         model = lightgbm_model(config, train_x, train_y, valid_x, valid_y, train_query, valid_query)
 
+    logger.info(pd.Series(model.feature_importance(importance_type='gain'), index=model.feature_name()).sort_values(ascending=False)[:50])
     logger.info('Predicting on validation set...')
     pred_valid_x = model.predict(valid_x, num_iteration=model.best_iteration)
+
+    if reg:
+        rmse = np.sqrt(mean_squared_error(valid_y, pred_valid_x))
+        logger.info(f'Validation RMSE: {rmse}')
+    else:
+        # グループごとにNDCGを計算
+        start = 0
+        scores = []
+        for group_size in valid_query:
+            end = start + group_size
+            true_relevance = valid_y[start:end]     # グループごとの真のラベル
+            predicted_scores = pred_valid_x[start:end]  # グループごとの予測スコア
+            score = ndcg_score([true_relevance], [predicted_scores], k=3)  # NDCG計算
+            scores.append(score)
+            start = end
+        # 全体の平均NDCGを計算
+        mean_ndcg = sum(scores) / len(scores)
+        logger.info(f'Validation NDCG@3: {mean_ndcg}')
     return model, pred_valid_x
 
 def lightgbm_model(config, train_x, train_y, valid_x, valid_y, train_query=None, valid_query=None):
@@ -152,34 +172,31 @@ def lightgbm_model(config, train_x, train_y, valid_x, valid_y, train_query=None,
 
 def regression(model_class, df, config, scaler=None):
     logger.info(f'model: {config}')
-    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df, config)
+    train_x, train_y, _, valid_x, valid_y, _ = prepare_train_valid_dataset(df, config)
     model_file = Path(f'models/{config.file}')
 
     if model_file.exists():
         model = load_model(model_file)
     else:
-        model, _ = train_model(model_class, train_x, train_y, config.params, scaler)
+        model = train_model(model_class, train_x, train_y, config.params, scaler)
         save_model(model, model_file)
 
     logger.info('Predicting on validation set...')
     pred_valid_x = model.predict(valid_x)
+    rmse = np.sqrt(mean_squared_error(valid_y, pred_valid_x))
+    logger.info(f'Validation RMSE: {rmse}')
     return model, pred_valid_x
 
-def kneighbors_regression(df, config):
-    logger.info(f'model: {config}')
-    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df, config)
-    model_file = Path(f'models/{config.file}')
-
-    if model_file.exists():
-        model = UsearchKNeighborsRegressor()
-        model.load(model_file)
+def standard_scaler():
+    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df_feat, config.l1_sgd_regression)
+    scaler_file = Path(f'models/{config.scaler_file}')
+    if scaler_file.exists():
+        scaler = load_model(scaler_file)
     else:
-        model, _ = train_model(UsearchKNeighborsRegressor, train_x, train_y, config.params)
-        model.save(model_file)
-
-    logger.info('Predicting on validation set...')
-    pred_valid_x = model.predict(valid_x)
-    return model, pred_valid_x
+        scaler = StandardScaler()
+        scaler.fit(train_x)
+        save_model(scaler, scaler_file)
+    return scaler
 
 if __name__ == "__main__":
     now = datetime.now().strftime('%Y%m%d_%H%M')
@@ -229,11 +246,8 @@ if __name__ == "__main__":
 
     # Scaler
     logger.info(f'--- Scaler ---')
-    train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df_feat, config.l1_sgd_regression)
-    scaler = StandardScaler()
-    scaler.fit(train_x)
+    scaler = standard_scaler()
     scaled_l2_valid_x = scaler.transform(l2_valid_x)
-    save_model(scaler, Path(f'models/{config.scaler_file}'))
 
     # Layer 1: SGD Regressor
     logger.info(f'--- Layer 1: SGD Regressor ---')

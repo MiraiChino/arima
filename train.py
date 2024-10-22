@@ -9,9 +9,11 @@ import polars as pl
 from loguru import logger
 from torch.utils.tensorboard import SummaryWriter
 from lightgbm import Dataset
-from sklearn.linear_model import LassoCV, SGDRegressor, ARDRegression, HuberRegressor, BayesianRidge, ElasticNet
+from sklearn.linear_model import LassoCV, SGDRegressor, ARDRegression, HuberRegressor, BayesianRidge, ElasticNet, LogisticRegression
 from sklearn.preprocessing import StandardScaler
-from sklearn.tree import ExtraTreeRegressor
+from sklearn.ensemble import ExtraTreesRegressor, RandomForestRegressor
+from sklearn.svm import LinearSVR
+from sklearn.naive_bayes import GaussianNB
 from sklearn.metrics import ndcg_score, mean_squared_error
 
 import config
@@ -115,6 +117,21 @@ def train_model(model_class, train_x, train_y, params, scaler=None):
     logger.info(f'Training complete for model: {model_class.__name__}')
     return model
 
+def nddcg_at(k, y_pred, y_valid, query):
+    # グループごとにNDCGを計算
+    start = 0
+    scores = []
+    for group_size in query:
+        end = start + group_size
+        true_relevance = y_valid[start:end]     # グループごとの真のラベル
+        predicted_scores = y_pred[start:end]  # グループごとの予測スコア
+        score = ndcg_score([true_relevance], [predicted_scores], k=k)  # NDCG計算
+        scores.append(score)
+        start = end
+    # 全体の平均NDCGを計算
+    mean_ndcg = sum(scores) / len(scores)
+    return mean_ndcg
+
 def lgb(df, config, reg=False):
     logger.info(f'model: {config}')
     train_x, train_y, train_query, valid_x, valid_y, valid_query = prepare_train_valid_dataset(df, config)
@@ -132,19 +149,8 @@ def lgb(df, config, reg=False):
         rmse = np.sqrt(mean_squared_error(valid_y, pred_valid_x))
         logger.info(f'Validation RMSE: {rmse}')
     else:
-        # グループごとにNDCGを計算
-        start = 0
-        scores = []
-        for group_size in valid_query:
-            end = start + group_size
-            true_relevance = valid_y[start:end]     # グループごとの真のラベル
-            predicted_scores = pred_valid_x[start:end]  # グループごとの予測スコア
-            score = ndcg_score([true_relevance], [predicted_scores], k=3)  # NDCG計算
-            scores.append(score)
-            start = end
-        # 全体の平均NDCGを計算
-        mean_ndcg = sum(scores) / len(scores)
-        logger.info(f'Validation NDCG@3: {mean_ndcg}')
+        ndcg3 = nddcg_at(3, pred_valid_x, valid_y, valid_query)
+        logger.info(f'Validation NDCG@3: {ndcg3}')
     return model, pred_valid_x
 
 def lightgbm_model(config, train_x, train_y, valid_x, valid_y, train_query=None, valid_query=None):
@@ -184,8 +190,32 @@ def regression(model_class, df, config, scaler=None):
     logger.info('Predicting on validation set...')
     pred_valid_x = model.predict(valid_x)
     rmse = np.sqrt(mean_squared_error(valid_y, pred_valid_x))
-    logger.info(f'Validation RMSE: {rmse}')
+    logger.info(f'Validation RMSE: {rmse:.4f}')
     return model, pred_valid_x
+
+
+def classification_as_regression(model_class, df, config, scaler=None):
+    logger.info(f'model: {config}')
+    train_x, train_y, _, valid_x, valid_y, _ = prepare_train_valid_dataset(df, config)
+    model_file = Path(f'models/{config.file}')
+
+    if model_file.exists():
+        model, class_labels = load_model(model_file)
+    else:
+        model = train_model(model_class, train_x, train_y, config.params, scaler)
+        class_labels = np.sort(np.unique(train_y))
+        save_model((model, class_labels), model_file)
+
+    logger.info('Predicting on validation set...')
+    pred_valid_x = classification_to_regression(model, class_labels, valid_x)
+    rmse = np.sqrt(mean_squared_error(valid_y, pred_valid_x))
+    logger.info(f'Validation RMSE: {rmse:.4f}')
+    return model, class_labels, pred_valid_x
+
+def classification_to_regression(model, class_labels, x):
+    pred_x_proba = model.predict_proba(x)
+    pred_x = np.dot(pred_x_proba, class_labels)
+    return pred_x
 
 def standard_scaler():
     train_x, train_y, _, valid_x, _, _ = prepare_train_valid_dataset(df_feat, config.l1_sgd_regression)
@@ -223,6 +253,11 @@ if __name__ == "__main__":
     l1_preds_i = []
     l2_preds_i = []
 
+    # Scaler
+    logger.info(f'--- Scaler ---')
+    scaler = standard_scaler()
+    scaled_l2_valid_x = scaler.transform(l2_valid_x)
+    
     # Layer 1: LightGBM LambdaRank Prize
     logger.info(f'--- Layer 1: LightGBM LambdaRank Prize ---')
     lgb_rank_prize, l1_pred = lgb(df=df_feat, config=config.l1_lgb_rank_prize)
@@ -243,11 +278,6 @@ if __name__ == "__main__":
     l2_pred = lgb_regression.predict(l2_valid_x, num_iteration=lgb_regression.best_iteration)
     l1_preds_i.append(l1_pred)
     l2_preds_i.append(l2_pred)
-
-    # Scaler
-    logger.info(f'--- Scaler ---')
-    scaler = standard_scaler()
-    scaled_l2_valid_x = scaler.transform(l2_valid_x)
 
     # Layer 1: SGD Regressor
     logger.info(f'--- Layer 1: SGD Regressor ---')
@@ -284,17 +314,38 @@ if __name__ == "__main__":
     l1_preds_i.append(l1_pred)
     l2_preds_i.append(l2_pred)
 
-    # Layer 1: ExtraTreeRegressor
-    logger.info(f'--- Layer 1: ExtraTreeRegressor ---')
-    extra_tree, l1_pred = regression(ExtraTreeRegressor, df=df_feat, config=config.l1_etr_regression)
-    l2_pred = extra_tree.predict(l2_valid_x)
-    l1_preds_i.append(l1_pred)
-    l2_preds_i.append(l2_pred)
+    # Layer 1: ExtraTreesRegressor
+    # logger.info(f'--- Layer 1: ExtraTreesRegressor ---')
+    # extra_tree, l1_pred = regression(ExtraTreesRegressor, df=df_feat, config=config.l1_etr_regression)
+    # l2_pred = extra_tree.predict(l2_valid_x)
+    # l1_preds_i.append(l1_pred)
+    # l2_preds_i.append(l2_pred)
 
     # Layer 1: ElasticNet
     logger.info(f'--- Layer 1: ElasticNet ---')
     elasticnet, l1_pred = regression(ElasticNet, df=df_feat, config=config.l1_en_regression, scaler=scaler)
     l2_pred = elasticnet.predict(scaled_l2_valid_x)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
+
+    # Layer 1: RandomForest Regression
+    # logger.info(f'--- Layer 1: RandomForest Regression ---')
+    # randomforest, l1_pred = regression(RandomForestRegressor, df=df_feat, config=config.l1_rf_regression)
+    # l2_pred = randomforest.predict(scaled_l2_valid_x)
+    # l1_preds_i.append(l1_pred)
+    # l2_preds_i.append(l2_pred)
+
+    # Layer 1: LogisticRegression Classification
+    logger.info(f'--- Layer 1: LogisticRegression Classification ---')
+    logi, class_labels, l1_pred = classification_as_regression(LogisticRegression, df=df_feat, config=config.l1_lr_classification, scaler=scaler)
+    l2_pred = classification_to_regression(logi, class_labels, scaled_l2_valid_x)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
+
+    # Layer 1: Gaussian Naive Bayes Classification
+    logger.info(f'--- Layer 1: Gaussian Naive Bayes Classification ---')
+    gnb, class_labels, l1_pred = classification_as_regression(GaussianNB, df=df_feat, config=config.l1_gnb_classification, scaler=scaler)
+    l2_pred = classification_to_regression(gnb, class_labels, scaled_l2_valid_x)
     l1_preds_i.append(l1_pred)
     l2_preds_i.append(l2_pred)
 
@@ -309,6 +360,7 @@ if __name__ == "__main__":
     logger.info(f'--- Layer2: Stacking LightGBM LambdaRank ---')
     model = config.l2_stacking_lgb_rank
     logger.info(f'train: {model}')
+
     train_x = np.hstack((np.vstack(l1_valid_xs), np.vstack(predicted_l1_valid_xs)))
     train_y = np.hstack(l1_valid_ys)
     l2_train_query = valid_query
@@ -316,6 +368,22 @@ if __name__ == "__main__":
     valid_y = l2_valid_y
     train = Dataset(train_x, train_y, group=l2_train_query)
     valid = Dataset(valid_x, valid_y, group=l2_valid_query)
+
+    columns = l2_valid_x.columns.tolist() + [
+        "lgbrankprize",
+        "lgbrankscore",
+        "lgbreg",
+        "sgd",
+        "lasso",
+        "ard",
+        "huber",
+        "bayesianridge",
+        # "extratrees",
+        "elasticnet",
+        # "randomforest",
+        "logisticreg",
+        "gaussiannb",
+    ]
     m = lightgbm.train(
         model.params,
         train,
@@ -327,6 +395,10 @@ if __name__ == "__main__":
             LogSummaryWriterCallback(period=1, writer=SummaryWriter(log_dir=Path("temp", 'logs')))
         ],
     )
-    logger.info(pd.Series(m.feature_importance(importance_type='gain'), index=m.feature_name()).sort_values(ascending=False)[:50])
+    logger.info(pd.Series(m.feature_importance(importance_type='gain'), index=columns).sort_values(ascending=False)[:50])
+    logger.info('Predicting on validation set...')
+    pred_valid_x = m.predict(valid_x, num_iteration=m.best_iteration)
+    ndcg3 = nddcg_at(3, pred_valid_x, valid_y, l2_valid_query)
+    logger.info(f'Validation NDCG@3: {ndcg3}')
     with open(f'models/{model.file}', 'wb') as f:
         pickle.dump(m, f)

@@ -144,13 +144,18 @@ l1_br_regression = Dict(
     }
 )
 
-# Layer1: ExtraTreeRegressor
+# Layer1: ExtraTreeｓRegressor
 l1_etr_regression = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
     file=f'etrprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
+        'n_estimators': 100,
+        'max_depth': 32,
+        'max_features': 'log2',
+        'n_jobs': -1,
+        'verbose': 0,
     }
 )
 
@@ -160,6 +165,42 @@ l1_en_regression = Dict(
     valid=dataset_query.layer1_valid,
     file=f'enprize_{from_date}_{to_date}.pickle',
     target='prizeper',
+    params={
+    }
+)
+
+# Layer1: RandomForest Regression
+l1_rf_regression = Dict(
+    train=dataset_query.layer1_train,
+    valid=dataset_query.layer1_valid,
+    file=f'rfregprize_{from_date}_{to_date}.pickle',
+    target='prizeper',
+    params={
+        'n_estimators': 100,
+        'max_depth': 32,
+        'max_features': 'log2',
+        'n_jobs': -1,
+        'verbose': 0,
+    }
+)
+
+# Layer1: LogisticRegression Classification
+l1_lr_classification = Dict(
+    train=dataset_query.layer1_train,
+    valid=dataset_query.layer1_valid,
+    file=f'lrclsscore_{from_date}_{to_date}.pickle',
+    target='score',
+    params={
+        'verbose': 0,
+    }
+)
+
+# Layer1: Gaussian Naive Bayes Classification
+l1_gnb_classification = Dict(
+    train=dataset_query.layer1_train,
+    valid=dataset_query.layer1_valid,
+    file=f'gnbclsscore_{from_date}_{to_date}.pickle',
+    target='score',
     params={
     }
 )
@@ -175,6 +216,9 @@ l1_models = [
     l1_br_regression,
     l1_etr_regression,
     l1_en_regression,
+    l1_rf_regression,
+    l1_lr_classification,
+    l1_gnb_classification,
 ]
 
 # Layer2: Stacking model: LightGBM LambdaRank

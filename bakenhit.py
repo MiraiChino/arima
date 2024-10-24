@@ -209,4 +209,10 @@ if __name__ == "__main__":
     train_y = train_x.pop(bakenhit_config.target)
     valid_x = df_race.query(bakenhit_config.valid).drop(columns=noneed, errors="ignore")
     valid_y = valid_x.pop(bakenhit_config.target)
-    train.lightgbm_model(bakenhit_config, train_x, train_y, valid_x, valid_y)
+    model = train.lightgbm_model(bakenhit_config, train_x, train_y, valid_x, valid_y)
+
+    import numpy as np
+    from sklearn.metrics import mean_squared_error
+    pred_valid_x = model.predict(valid_x, num_iteration=model.best_iteration)
+    rmse = np.sqrt(mean_squared_error(valid_y, pred_valid_x))
+    print(f'Validation RMSE: {rmse:.4f}')

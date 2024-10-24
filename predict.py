@@ -206,7 +206,7 @@ def search_df_feat(df, task_logs=[]):
         pl.col('turn').cast(pl.Int8),
     ])
 
-    task_logs.append(f"searching race history")
+    task_logs.append(f"filtering race history")
     condition = [pl.col(column).is_in(df_encoded[column].to_list()) for column in feat_pattern.keys()]
     race_date = df_encoded["race_date"][0]
     hist = history.filter((pl.col('race_date') < race_date) & pl.any_horizontal(condition))
@@ -219,6 +219,7 @@ def search_df_feat(df, task_logs=[]):
     ])
 
     # 過去の最頻runningをrunning_styleとして定義
+    task_logs.append(f"calculating running style")
     horse_ids = df_encoded.get_column("horse_id").cast(pl.Int32).to_list()
     running_styles = []
     for horse_id in horse_ids:
@@ -240,14 +241,17 @@ def search_df_feat(df, task_logs=[]):
     df_encoded = df_encoded.drop("new_running_style")
 
     # avetime
+    task_logs.append(f"calculating avetime")
     race_condition = ['field', 'distance', 'field_condition']
     avetime = hist.select([*race_condition, 'avetime']).unique(subset=[*race_condition, 'avetime'])
     df_encoded = df_encoded.join(avetime, on=race_condition, how='left')
     # aversrize
+    task_logs.append(f"calculating aversrize")
     race_condition = ['running_style', 'field', 'distance', 'field_condition', 'place_code', 'gate', 'turn']
     aversrize = hist.select([*race_condition, 'aversrize']).unique(subset=[*race_condition, 'aversrize'])
     df_encoded = df_encoded.join(aversrize, on=race_condition, how='left')
 
+    task_logs.append(f"searching race history")
     df_feat = pd.DataFrame()
     for row in df_encoded.rows():
         df_agg = feature.search_history(row, hist_pattern, feat_pattern, hist)
@@ -320,7 +324,6 @@ def result_prob(df_feat, task_logs=[]):
 def bin_race_dict(df_past, breakpoints, bin_count, task_logs=[]):
     race_dict = {}
     df_past = pl.DataFrame(df_past)
-    task_logs.append(f"df_past: {df_past}")
 
     task_logs.append("calculating bins")
     # 各カラムのビンを生成し、カウントを更新
@@ -335,12 +338,10 @@ def bin_race_dict(df_past, breakpoints, bin_count, task_logs=[]):
 
         # データをビンにカット
         bins = df_past[col].cut(breaks, labels=labels)
-        task_logs.append(f"bins: {bins}")
         for i in bins:
             key = f"{col}_bin{i}"
             if key in race_dict.keys():
                 race_dict[key] += 1
-    task_logs.append(f"df_past length: {len(df_past)}")
     return race_dict
 
 def result_bakenhit(df_past, task_logs=[]):
@@ -356,7 +357,6 @@ def result_bakenhit(df_past, task_logs=[]):
     important_columns = importance_head.get_column("column").to_list()
     noneed = ["race_id", "race_date"] + config.NONEED_COLUMNS
     df_past = df_past[important_columns].drop(columns=noneed, errors="ignore")
-    task_logs.append(f"len(df_past.columns): {len(df_past.columns)}")
     race_dict = bin_race_dict(df_past, breakpoints, config.bakenhit_lgb_reg.bins, task_logs)
     race_features_df = pl.DataFrame([race_dict])
 

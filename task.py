@@ -123,6 +123,7 @@ class CreateBakenHTML(Task):
             baken = predict.calc_odds(baken, race_id, top, self.logs)
             baken = predict.pretty_baken(baken, top)
             baken = predict.good_baken(baken, odd_th)
+            self.logs.append(f"start creating {baken_html}")
         except Exception as e:
             self.logs.append(f"{traceback.format_exc()}")
             with open(f"{race_id}.predict", 'rb') as f:

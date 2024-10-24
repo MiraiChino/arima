@@ -146,7 +146,6 @@ def create_baken_html(race_id: str, request: Request, background_tasks: Backgrou
             a(f"Go /predict/{race_id}", _href=f"{request.base_url}predict/{race_id}"),
         )))
     
-    print("dow update")
     task_create.init()
     background_tasks.add_task(task_create, task_id, race_id, top, odd_th, next_url=f"{request.base_url}result/{race_id}")
     return streamlog_html

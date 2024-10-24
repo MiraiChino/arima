@@ -366,7 +366,7 @@ def result_bakenhit(df_past, task_logs=[]):
     values = race_features_df[model.feature_name()].to_pandas().values
     pred = model.predict(values, num_iteration=model.best_iteration)
     task_logs.append(f'bakenhit prob {pred}')
-    return pred
+    return pred.tolist()[0]
 
 def baken_prob(prob, names):
     baken = {

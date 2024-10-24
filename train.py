@@ -11,8 +11,8 @@ from torch.utils.tensorboard import SummaryWriter
 from lightgbm import Dataset
 from sklearn.linear_model import LassoCV, SGDRegressor, ARDRegression, HuberRegressor, BayesianRidge, ElasticNet, LogisticRegression
 from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import ExtraTreesRegressor, RandomForestRegressor
-from sklearn.svm import LinearSVR
+# from sklearn.ensemble import ExtraTreesRegressor, RandomForestRegressor
+# from sklearn.svm import LinearSVR
 from sklearn.naive_bayes import GaussianNB
 from sklearn.metrics import ndcg_score, mean_squared_error
 

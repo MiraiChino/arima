@@ -214,9 +214,9 @@ l1_models = [
     l1_ard_regression,
     l1_huber_regression,
     l1_br_regression,
-    l1_etr_regression,
+    # l1_etr_regression,
     l1_en_regression,
-    l1_rf_regression,
+    # l1_rf_regression,
     l1_lr_classification,
     l1_gnb_classification,
 ]

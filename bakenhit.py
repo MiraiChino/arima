@@ -59,9 +59,7 @@ def generate_baken(order):
     }
 
 def process_race(df, df_shutsuba, prob):
-    race_id = str(df.get_column("race_id")[0])
-    race_date = str(df.get_column("race_date")[0])
-
+    df = pl.DataFrame(df)
     try:
         # 重複を削除
         df_filtered = df.unique(subset="name", keep="first").sort(by="horse_no")
@@ -86,7 +84,7 @@ def process_race(df, df_shutsuba, prob):
     # 馬券の的中数
     bakenhit = baken_hit(baken_predicted, baken_actual)
 
-    return bakenhit, race_id, race_date
+    return bakenhit
 
 def use_columns_from_importance():
     print(f"loading models/{config.bakenhit_lgb_reg.feature_importance_model}")
@@ -160,12 +158,14 @@ def save_racefeat():
         df_shutsuba = df_netkeiba.filter(pl.col("race_id") == race_id)
 
         # 予測結果
-        result_prob = predict.result_prob(df)
+        df_feat = predict.search_df_feat(df_shutsuba)
+        result_prob = predict.result_prob(df_feat)
 
-        race_dict = predict.bin_race_dict(df, breakpoints, bin_count)
-        bakenhit, race_id, race_date = process_race(df, df_shutsuba, result_prob)
-        race_dict['race_id'] = race_id
-        race_dict['race_date'] = race_date
+        race_dict = predict.bin_race_dict(df_feat, breakpoints, bin_count)
+
+        race_dict['race_id'] = str(df.get_column("race_id")[0])
+        race_dict['race_date'] = str(df.get_column("race_date")[0])
+        bakenhit = process_race(df, df_shutsuba, result_prob)
         race_dict['bakenhit'] = bakenhit
         race_features_df = pl.DataFrame([race_dict])
         if schema is None:
@@ -203,7 +203,7 @@ if __name__ == "__main__":
 
     df_race = df_race.to_pandas()
     bakenhit_config = config.bakenhit_lgb_reg
-    noneed = ["race_id", "race_date"] + config.NONEED_COLUMNS + config.RUNNING_COLUMNS
+    noneed = ["race_id", "race_date"] + config.NONEED_COLUMNS
     train_x = df_race.query(bakenhit_config.train).drop(columns=noneed, errors="ignore")
     print("len(train_x): ", len(train_x))
     train_y = train_x.pop(bakenhit_config.target)

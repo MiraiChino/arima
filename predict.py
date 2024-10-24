@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass, field
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action='ignore', category=UserWarning)
 
 import dill as pickle
 import numpy as np
@@ -148,7 +149,7 @@ def load_models_and_configs(task_logs=[]):
         history = pl.read_ipc(config.feat_file)
 
     task_logs.append(f"loading scaler")
-    with open(config.scaler_file, "rb") as f:
+    with open(f"models/{config.scaler_file}", "rb") as f:
         scaler = pickle.load(f)
 
     task_logs.append(f"loading models")
@@ -181,12 +182,12 @@ def search_df_feat(df, task_logs=[]):
         pl.lit(None).alias('huku1'),
         pl.lit(None).alias('huku2'),
         pl.lit(None).alias('huku3'),
-        # pl.lit(None).alias('corner1_group'),
-        # pl.lit(None).alias('corner2_group'),
-        # pl.lit(None).alias('corner3_group'),
-        # pl.lit(None).alias('corner4_group'),
-        # pl.lit(None).alias('running'),
-        # pl.lit(None).alias('running_style').cast(pl.Int8),
+        pl.lit(None).alias('corner1_group'),
+        pl.lit(None).alias('corner2_group'),
+        pl.lit(None).alias('corner3_group'),
+        pl.lit(None).alias('corner4_group'),
+        pl.lit(None).alias('running'),
+        pl.lit(None).alias('running_style').cast(pl.Int8),
         pl.col("race_id").count().over("race_id").alias("num_horses"),
         pl.col('corner').cast(str),
         pl.col('last3f').cast(float),
@@ -216,13 +217,32 @@ def search_df_feat(df, task_logs=[]):
         'horse_oldr', 'jockey_oldr', 'trainer_oldr',
         'horse_newr', 'jockey_newr', 'trainer_newr',
     ])
-    # horse_running_style => running_styleとして推定する
+
+    # 過去の最頻runningをrunning_styleとして定義
+    horse_ids = df_encoded.get_column("horse_id").cast(pl.Int32).to_list()
+    running_styles = []
+    for horse_id in horse_ids:
+        horse_hist = hist.filter(pl.col("horse_id") == horse_id)
+        last_race = horse_hist[-1]
+        if last_race.is_empty():
+            running_style = -1
+        else:
+            running_style = last_race.get_column("running_style").to_list()[0]
+        running_styles.append(running_style)
+    df_running_style = pl.DataFrame({
+        "horse_id": horse_ids,
+        "new_running_style": running_styles,
+    }).with_columns(pl.col("horse_id").cast(pl.Float64), pl.col("new_running_style").cast(pl.Int8))
+    df_encoded = df_encoded.join(df_running_style, on="horse_id", how="left")
+    df_encoded = df_encoded.with_columns(
+        pl.col("new_running_style").fill_null(pl.col("running_style")).alias("running_style")
+    )
+    df_encoded = df_encoded.drop("new_running_style")
 
     # avetime
     race_condition = ['field', 'distance', 'field_condition']
     avetime = hist.select([*race_condition, 'avetime']).unique(subset=[*race_condition, 'avetime'])
     df_encoded = df_encoded.join(avetime, on=race_condition, how='left')
-
     # aversrize
     race_condition = ['running_style', 'field', 'distance', 'field_condition', 'place_code', 'gate', 'turn']
     aversrize = hist.select([*race_condition, 'aversrize']).unique(subset=[*race_condition, 'aversrize'])
@@ -239,6 +259,11 @@ def search_df_feat(df, task_logs=[]):
     df_feat = df_feat.drop(columns=noneed_columns) # (16, 964)
     return df_feat
 
+def classification_to_regression(model, class_labels, x):
+    pred_x_proba = model.predict_proba(x)
+    pred_x = np.dot(pred_x_proba, class_labels)
+    return pred_x
+
 def result_prob(df_feat, task_logs=[]):
     task_logs.append(f"predict")
     preds = []
@@ -251,25 +276,31 @@ def result_prob(df_feat, task_logs=[]):
                 values = df_feat[model.feature_name()].values
                 pred = model.predict(values, num_iteration=model.best_iteration)
             elif "sgd" in model_name:
-                df_feat = df_feat.fillna(0)[model.feature_names_in_]
+                df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
                 pred = model.predict(scaler.transform(df_feat))
-            elif "rf" in model_name:
-                pred = model.predict(df_feat[model.feature_names_in_])
             elif "ard" in model_name:
-                df_feat = df_feat[model.feature_names_in_]
+                df_feat = df_feat[scaler.feature_names_in_]
                 pred = model.predict(scaler.transform(df_feat))
             elif "huber" in model_name:
-                df_feat = df_feat[model.feature_names_in_]
+                df_feat = df_feat[scaler.feature_names_in_]
                 pred = model.predict(scaler.transform(df_feat))
             elif "br" in model_name:
-                df_feat = df_feat[model.feature_names_in_]
+                df_feat = df_feat[scaler.feature_names_in_]
                 pred = model.predict(scaler.transform(df_feat))
             elif "etr" in model_name:
                 df_feat = df_feat[model.feature_names_in_]
                 pred = model.predict(df_feat)
             elif "en" in model_name:
-                df_feat = df_feat[model.feature_names_in_]
+                df_feat = df_feat[scaler.feature_names_in_]
                 pred = model.predict(scaler.transform(df_feat))
+            elif "rf" in model_name:
+                pred = model.predict(df_feat[model.feature_names_in_])
+            elif "lr" in model_name:
+                model, class_labels = model
+                pred = classification_to_regression(model, class_labels, df_feat[scaler.feature_names_in_])
+            elif "gnb" in model_name:
+                model, class_labels = model
+                pred = classification_to_regression(model, class_labels, df_feat[scaler.feature_names_in_])
             
         except:
             import traceback; print(traceback.format_exc())
@@ -307,8 +338,9 @@ def bin_race_dict(df_past, breakpoints, bin_count, task_logs=[]):
         task_logs.append(f"bins: {bins}")
         for i in bins:
             key = f"{col}_bin{i}"
-            race_dict[key] += 1
-    task_logs.appenddd(f"df_past length: {len(df_past)}")
+            if key in race_dict.keys():
+                race_dict[key] += 1
+    task_logs.append(f"df_past length: {len(df_past)}")
     return race_dict
 
 def result_bakenhit(df_past, task_logs=[]):
@@ -328,10 +360,10 @@ def result_bakenhit(df_past, task_logs=[]):
     race_dict = bin_race_dict(df_past, breakpoints, config.bakenhit_lgb_reg.bins, task_logs)
     race_features_df = pl.DataFrame([race_dict])
 
-    task_logs.append(f'loading {config.bakenhit_lgb_reg.file}')
-    with open(config.bakenhit_lgb_reg.file, "rb") as f:
+    task_logs.append(f'loading models/{config.bakenhit_lgb_reg.file}')
+    with open(f"models/{config.bakenhit_lgb_reg.file}", "rb") as f:
         model = pickle.load(f)
-    values = race_features_df[model.feature_name()].values
+    values = race_features_df[model.feature_name()].to_pandas().values
     pred = model.predict(values, num_iteration=model.best_iteration)
     task_logs.append(f'bakenhit prob {pred}')
     return pred
@@ -510,7 +542,7 @@ if __name__ == "__main__":
     p = result_prob(df_feat)
     print(p)
     bakenhit_prob = result_bakenhit(df_feat)
-    print(baken_prob)
+    print(bakenhit_prob)
     names = {no: name for no, name in zip(df_original["horse_no"].to_list(), df_original["name"].to_list())}
     baken = baken_prob(p, names)
     baken = calc_odds(baken, args.race_id, top=100)

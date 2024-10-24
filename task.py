@@ -118,6 +118,7 @@ class CreateBakenHTML(Task):
             self.logs.append(f"loaded {race_id}.predict")
         except Exception as e:
             self.logs.append(f"{traceback.format_exc()}")
+        base_url = next_url.split('/')[0]
 
         try:
             baken = predict.calc_odds(baken, race_id, top, self.logs)
@@ -131,11 +132,12 @@ class CreateBakenHTML(Task):
                 baken, r = pickle.load(f)
             baken = predict.pretty_prob(baken, top)
             pagebody = body(
+                a(f"オッズの更新 /update/{race_id}", _href=f"{base_url}update/{race_id}"),
                 h3(f"{r.race_num}R {r.race_name}　{r.year}年{r.race_date} {netkeiba.PLACE[r.place_code]}"),
                 div(f"{r.start_time}発走 / {r.field}{r.distance}m ({r.turn}) / 天候:{r.weather} / 馬場:{r.field_condition}"),
                 div(f"{r.race_condition} / 本賞金:{r.prize1},{r.prize2},{r.prize3},{r.prize4},{r.prize5}万円"),
                 hr(),
-                div(f"馬券の的中率: {bakenhit_prob:.2%} "),
+                h3(f"馬券の的中率: {bakenhit_prob:.2%} "),
                 div(f"※予測トップ3の各馬券（単勝1枚,複勝3枚,ワイド3枚,馬連1枚,馬単1枚,3連複1枚,3連単1枚）計11枚を買ったときに当たる馬券枚数の期待値"),
                 hr(),
                 h3("単勝", _class="clear"),
@@ -155,11 +157,12 @@ class CreateBakenHTML(Task):
             )
         else:
             pagebody = body(
+                a(f"オッズの更新 /update/{race_id}", _href=f"{base_url}update/{race_id}"),
                 h3(f"{r.race_num}R {r.race_name}　{r.year}年{r.race_date} {netkeiba.PLACE[r.place_code]}"),
                 div(f"{r.start_time}発走 / {r.field}{r.distance}m ({r.turn}) / 天候:{r.weather} / 馬場:{r.field_condition}"),
                 div(f"{r.race_condition} / 本賞金:{r.prize1},{r.prize2},{r.prize3},{r.prize4},{r.prize5}万円"),
                 hr(),
-                div(f"馬券の的中率: {bakenhit_prob:.2%} "),
+                h3(f"馬券の的中率: {bakenhit_prob:.2%} "),
                 div(f"※予測トップ3の各馬券（単勝1枚,複勝3枚,ワイド3枚,馬連1枚,馬単1枚,3連複1枚,3連単1枚）計11枚を買ったときに当たる馬券枚数の期待値"),
                 hr(),
                 h3("単勝", _class="clear"),

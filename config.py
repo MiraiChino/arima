@@ -44,11 +44,27 @@ dataset_query = Dict(
 
 scaler_file = f'scaler_{from_date}_{to_date}.pickle'
 
-# Layer1: LightGBM LambdaRank Prize
-l1_lgb_rank_prize = Dict(
+# Layer1: LightGBM LambdaRank Prize1
+l1_lgb_rank_prize1 = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
-    file=f'lgbrankprize_{from_date}_{to_date}.pickle',
+    file=f'lgbrankprize1_{from_date}_{to_date}.pickle',
+    target='prizeper',
+    params={
+        'objective': 'lambdarank',
+        'metric': 'ndcg',
+        'lambdarank_truncation_level': 10,
+        'ndcg_eval_at': [1],
+        'boosting_type': 'gbdt',
+        'learning_rate': 0.01,
+    }
+)
+
+# Layer1: LightGBM LambdaRank Prize3
+l1_lgb_rank_prize3 = Dict(
+    train=dataset_query.layer1_train,
+    valid=dataset_query.layer1_valid,
+    file=f'lgbrankprize3_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
         'objective': 'lambdarank',
@@ -60,11 +76,43 @@ l1_lgb_rank_prize = Dict(
     }
 )
 
-# Layer1: LightGBM LambdaRank Score
-l1_lgb_rank_score = Dict(
+# Layer1: LightGBM LambdaRank Prize5
+l1_lgb_rank_prize5 = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
-    file=f'lgbrankscore_{from_date}_{to_date}.pickle',
+    file=f'lgbrankprize5_{from_date}_{to_date}.pickle',
+    target='prizeper',
+    params={
+        'objective': 'lambdarank',
+        'metric': 'ndcg',
+        'lambdarank_truncation_level': 10,
+        'ndcg_eval_at': [5],
+        'boosting_type': 'gbdt',
+        'learning_rate': 0.01,
+    }
+)
+
+# Layer1: LightGBM LambdaRank Score1
+l1_lgb_rank_score1 = Dict(
+    train=dataset_query.layer1_train,
+    valid=dataset_query.layer1_valid,
+    file=f'lgbrankscore1_{from_date}_{to_date}.pickle',
+    target='score',
+    params={
+        'objective': 'lambdarank',
+        'metric': 'ndcg',
+        'lambdarank_truncation_level': 10,
+        'ndcg_eval_at': [1],
+        'boosting_type': 'gbdt',
+        'learning_rate': 0.01,
+    }
+)
+
+# Layer1: LightGBM LambdaRank Score3
+l1_lgb_rank_score3 = Dict(
+    train=dataset_query.layer1_train,
+    valid=dataset_query.layer1_valid,
+    file=f'lgbrankscore3_{from_date}_{to_date}.pickle',
     target='score',
     params={
         'objective': 'lambdarank',
@@ -76,12 +124,41 @@ l1_lgb_rank_score = Dict(
     }
 )
 
-# Layer1: LightGBM Regression
-l1_lgb_regression = Dict(
+# Layer1: LightGBM LambdaRank Score5
+l1_lgb_rank_score5 = Dict(
+    train=dataset_query.layer1_train,
+    valid=dataset_query.layer1_valid,
+    file=f'lgbrankscore5_{from_date}_{to_date}.pickle',
+    target='score',
+    params={
+        'objective': 'lambdarank',
+        'metric': 'ndcg',
+        'lambdarank_truncation_level': 10,
+        'ndcg_eval_at': [5],
+        'boosting_type': 'gbdt',
+        'learning_rate': 0.01,
+    }
+)
+# Layer1: LightGBM Regression Prize
+l1_lgb_regprize = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
     file=f'lgbregprize_{from_date}_{to_date}.pickle',
     target='prizeper',
+    params={
+        'objective': 'regression',
+        'boosting_type': 'gbdt',
+        'metric': 'rmse',
+        'learning_rate': 0.01
+    }
+)
+
+# Layer1: LightGBM Regression Score
+l1_lgb_regscore = Dict(
+    train=dataset_query.layer1_train,
+    valid=dataset_query.layer1_valid,
+    file=f'lgbregscore_{from_date}_{to_date}.pickle',
+    target='score',
     params={
         'objective': 'regression',
         'boosting_type': 'gbdt',
@@ -206,10 +283,15 @@ l1_gnb_classification = Dict(
 )
 
 l1_models = [
-    l1_lgb_rank_prize,
-    l1_lgb_rank_score,
-    l1_lgb_regression,
-    l1_sgd_regression,
+    l1_lgb_rank_prize1,
+    l1_lgb_rank_prize3,
+    l1_lgb_rank_prize5,
+    l1_lgb_rank_score1,
+    l1_lgb_rank_score3,
+    l1_lgb_rank_score5,
+    l1_lgb_regprize,
+    l1_lgb_regscore,
+    # l1_sgd_regscore,
     l1_lasso_regression,
     l1_ard_regression,
     l1_huber_regression,
@@ -217,8 +299,8 @@ l1_models = [
     # l1_etr_regression,
     l1_en_regression,
     # l1_rf_regression,
-    l1_lr_classification,
-    l1_gnb_classification,
+    # l1_lr_classification,
+    # l1_gnb_classification,
 ]
 
 # Layer2: Stacking model: LightGBM LambdaRank
@@ -239,7 +321,7 @@ l2_stacking_lgb_rank = Dict(
 
 # 馬券的中率を予測するモデル
 bakenhit_lgb_reg = Dict(
-    feature_importance_model=l1_lgb_regression.file,
+    feature_importance_model=l1_lgb_regprize.file,
     feature_importance_len=100, # 300個x10binで68GBにてOOM
     bins=10,
     train=dataset_query.train,

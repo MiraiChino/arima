@@ -283,19 +283,19 @@ def result_prob(df_feat, task_logs=[]):
                 df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
                 pred = model.predict(scaler.transform(df_feat))
             elif "ard" in model_name:
-                df_feat = df_feat[scaler.feature_names_in_]
+                df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
                 pred = model.predict(scaler.transform(df_feat))
             elif "huber" in model_name:
-                df_feat = df_feat[scaler.feature_names_in_]
+                df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
                 pred = model.predict(scaler.transform(df_feat))
             elif "br" in model_name:
-                df_feat = df_feat[scaler.feature_names_in_]
+                df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
                 pred = model.predict(scaler.transform(df_feat))
             elif "etr" in model_name:
                 df_feat = df_feat[model.feature_names_in_]
                 pred = model.predict(df_feat)
             elif "en" in model_name:
-                df_feat = df_feat[scaler.feature_names_in_]
+                df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
                 pred = model.predict(scaler.transform(df_feat))
             elif "rf" in model_name:
                 pred = model.predict(df_feat[model.feature_names_in_])

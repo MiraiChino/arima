@@ -496,7 +496,7 @@ def calc_odds(baken, race_id, top=100, task_logs=[]):
             try:
                 len_scraped = len(baken["三連単"].odds)
                 result = next(sanrentan_odds_gen)
-                task_logs.append(f"scraping 三連単: 人気 {len_scraped+1}~ {len_scraped+len(result)}")
+                task_logs.append(f"scraping 三連単: 人気 {len_scraped+1}~{len_scraped+len(result)}")
                 baken["三連単"].odds |= result
             except StopIteration:
                 break
@@ -505,7 +505,7 @@ def calc_odds(baken, race_id, top=100, task_logs=[]):
             try:
                 len_scraped = len(baken["三連複"].odds)
                 result = next(sanrenpuku_odds_gen)
-                task_logs.append(f"scraping 三連複: 人気 {len_scraped+1}~ {len_scraped+len(result)}")
+                task_logs.append(f"scraping 三連複: 人気 {len_scraped+1}~{len_scraped+len(result)}")
                 baken["三連複"].odds |= result
             except StopIteration:
                 break

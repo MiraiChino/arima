@@ -132,7 +132,7 @@ class CreateBakenHTML(Task):
                 baken, r = pickle.load(f)
             baken = predict.pretty_prob(baken, top)
             pagebody = body(
-                a(f"オッズの更新 /update/{race_id}", _href=f"{base_url}update/{race_id}"),
+                a(f"オッズの更新 /update/{race_id}", _href=f"{base_url}/update/{race_id}"),
                 h3(f"{r.race_num}R {r.race_name}　{r.year}年{r.race_date} {netkeiba.PLACE[r.place_code]}"),
                 div(f"{r.start_time}発走 / {r.field}{r.distance}m ({r.turn}) / 天候:{r.weather} / 馬場:{r.field_condition}"),
                 div(f"{r.race_condition} / 本賞金:{r.prize1},{r.prize2},{r.prize3},{r.prize4},{r.prize5}万円"),
@@ -157,7 +157,7 @@ class CreateBakenHTML(Task):
             )
         else:
             pagebody = body(
-                a(f"オッズの更新 /update/{race_id}", _href=f"{base_url}update/{race_id}"),
+                a(f"オッズの更新 /update/{race_id}", _href=f"{base_url}/update/{race_id}"),
                 h3(f"{r.race_num}R {r.race_name}　{r.year}年{r.race_date} {netkeiba.PLACE[r.place_code]}"),
                 div(f"{r.start_time}発走 / {r.field}{r.distance}m ({r.turn}) / 天候:{r.weather} / 馬場:{r.field_condition}"),
                 div(f"{r.race_condition} / 本賞金:{r.prize1},{r.prize2},{r.prize3},{r.prize4},{r.prize5}万円"),

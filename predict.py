@@ -481,33 +481,32 @@ def pretty_baken(baken, top=100):
 
 def calc_odds(baken, race_id, top=100, task_logs=[]):
     with chrome.driver() as driver:
-        task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?race_id={race_id}")
+        task_logs.append(f"scraping 単勝,複勝: https://race.netkeiba.com/odds/index.html?race_id={race_id}")
         baken["単勝"].odds, baken["複勝"].odds = netkeiba.scrape_tanhuku(driver, race_id)
-        task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?type=b6&race_id={race_id}")
+        task_logs.append(f"scraping 馬単: https://race.netkeiba.com/odds/index.html?type=b6&race_id={race_id}")
         baken["馬単"].odds = netkeiba.scrape_umatan(driver, race_id)
-        task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?type=b4&race_id={race_id}")
+        task_logs.append(f"scraping 馬連: https://race.netkeiba.com/odds/index.html?type=b4&race_id={race_id}")
         baken["馬連"].odds = netkeiba.scrape_umaren(driver, race_id)
-        task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?type=b5&race_id={race_id}")
+        task_logs.append(f"scraping ワイド: https://race.netkeiba.com/odds/index.html?type=b5&race_id={race_id}")
         baken["ワイド"].odds = netkeiba.scrape_wide(driver, race_id)
         sanrentan_odds_gen = netkeiba.scrape_sanrentan_generator(driver, race_id)
         sanrenpuku_odds_gen = netkeiba.scrape_sanrenpuku_generator(driver, race_id)
-        task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?type=b8&race_id={race_id}")
+        task_logs.append(f"scraping 三連単: https://race.netkeiba.com/odds/index.html?type=b8&race_id={race_id}")
         while not tuples1_in_tuples2(baken["三連単"].nums[:top], list(baken["三連単"].odds.keys())):
             try:
                 len_scraped = len(baken["三連単"].odds)
                 result = next(sanrentan_odds_gen)
-                task_logs.append(f"scraped: 三連単 人気 {len_scraped+1}~ {len_scraped+len(result)}")
+                task_logs.append(f"scraping 三連単: 人気 {len_scraped+1}~ {len_scraped+len(result)}")
                 baken["三連単"].odds |= result
             except StopIteration:
                 break
-        task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?type=b7&race_id={race_id}")
+        task_logs.append(f"scraping 三連複: https://race.netkeiba.com/odds/index.html?type=b7&race_id={race_id}")
         while not tuples1_in_tuples2(baken["三連複"].nums[:top], list(baken["三連複"].odds.keys())):
             try:
                 len_scraped = len(baken["三連複"].odds)
-                result = next(sanrentan_odds_gen)
-                task_logs.append(f"scraped: 三連複 人気 {len_scraped+1}~ {len_scraped+len(result)}")
+                result = next(sanrenpuku_odds_gen)
+                task_logs.append(f"scraping 三連複: 人気 {len_scraped+1}~ {len_scraped+len(result)}")
                 baken["三連複"].odds |= result
-                task_logs.append(f"scraped: {result}")
             except StopIteration:
                 break
     return baken

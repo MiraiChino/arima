@@ -494,13 +494,20 @@ def calc_odds(baken, race_id, top=100, task_logs=[]):
         task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?type=b8&race_id={race_id}")
         while not tuples1_in_tuples2(baken["三連単"].nums[:top], list(baken["三連単"].odds.keys())):
             try:
-                baken["三連単"].odds |= next(sanrentan_odds_gen)
+                len_scraped = len(baken["三連単"].odds)
+                result = next(sanrentan_odds_gen)
+                task_logs.append(f"scraped: 三連単 人気 {len_scraped+1}~ {len_scraped+len(result)}")
+                baken["三連単"].odds |= result
             except StopIteration:
                 break
         task_logs.append(f"scraping: https://race.netkeiba.com/odds/index.html?type=b7&race_id={race_id}")
         while not tuples1_in_tuples2(baken["三連複"].nums[:top], list(baken["三連複"].odds.keys())):
             try:
-                baken["三連複"].odds |= next(sanrenpuku_odds_gen)
+                len_scraped = len(baken["三連複"].odds)
+                result = next(sanrentan_odds_gen)
+                task_logs.append(f"scraped: 三連複 人気 {len_scraped+1}~ {len_scraped+len(result)}")
+                baken["三連複"].odds |= result
+                task_logs.append(f"scraped: {result}")
             except StopIteration:
                 break
     return baken

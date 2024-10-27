@@ -200,19 +200,25 @@ if __name__ == "__main__":
 
     # 馬券の的中率を予測する
     import train
+    from loguru import logger
+    from datetime import datetime
+
+    now = datetime.now().strftime('%Y%m%d_%H%M')
+    logger.add(f"temp/bakenhit_{now}.log")
 
     df_race = df_race.to_pandas()
     bakenhit_config = config.bakenhit_lgb_reg
     noneed = ["race_id", "race_date"] + config.NONEED_COLUMNS
     train_x = df_race.query(bakenhit_config.train).drop(columns=noneed, errors="ignore")
-    print("len(train_x): ", len(train_x))
+    logger.info("len(train_x): ", len(train_x))
     train_y = train_x.pop(bakenhit_config.target)
     valid_x = df_race.query(bakenhit_config.valid).drop(columns=noneed, errors="ignore")
     valid_y = valid_x.pop(bakenhit_config.target)
     model = train.lightgbm_model(bakenhit_config, train_x, train_y, valid_x, valid_y)
+    logger.info(pd.Series(model.feature_importance(importance_type='gain'), index=model.feature_name()).sort_values(ascending=False)[:50])
 
     import numpy as np
     from sklearn.metrics import mean_squared_error
     pred_valid_x = model.predict(valid_x, num_iteration=model.best_iteration)
     rmse = np.sqrt(mean_squared_error(valid_y, pred_valid_x))
-    print(f'Validation RMSE: {rmse:.4f}')
+    logger.info(f'Validation RMSE: {rmse:.4f}')

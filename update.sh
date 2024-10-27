@@ -4,8 +4,8 @@ echo python netkeiba.py
 python netkeiba.py
 echo python feature.py
 python feature.py
-echo python train.py | tee temp/train_$today.log
-python train.py | tee temp/train_$today.log
+echo python train.py
+python train.py
 echo python bakenhit.py
 python bakenhit.py
 echo docker compose -f docker-compose.deploy.yml build

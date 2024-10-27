@@ -118,7 +118,7 @@ class CreateBakenHTML(Task):
             self.logs.append(f"loaded {race_id}.predict")
         except Exception as e:
             self.logs.append(f"{traceback.format_exc()}")
-        base_url = next_url.split('/')[0]
+        base_url = next_url.split('/result')[0]
 
         try:
             baken = predict.calc_odds(baken, race_id, top, self.logs)

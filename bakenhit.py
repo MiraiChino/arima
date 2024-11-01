@@ -183,42 +183,131 @@ def downcast(df):
     df_downcast[icols] = df_downcast[icols].apply(pd.to_numeric, downcast='integer')
     return pl.from_pandas(df_downcast)
 
-if __name__ == "__main__":
-    if Path(config.racefeat_file).exists():
-        print(f"Already exists {config.racefeat_file}.")
-        df_race = pl.read_ipc(config.racefeat_file)
+def plot_kde_with_peak(pred_valid_x):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    from matplotlib.ticker import PercentFormatter
+
+    # グラフのスタイルとサイズ設定
+    sns.set_theme(style="white", palette="pastel")
+    plt.figure(figsize=(4, 3))
+
+    # カーネル密度推定（KDE）のプロット
+    kde = sns.kdeplot(pred_valid_x, bw_adjust=1.2, color='lightblue', label='KDE', alpha=0.7, fill=True)
+
+    # KDEの極大値をプロットして表示
+    x, y = kde.get_children()[0].get_paths()[0].vertices.T
+    maxid = y.argmax()
+    peak_x = x[maxid]
+
+    # 極大値のラインをプロット
+    y_position = plt.ylim()[1] * 1.01
+    plt.axvline(peak_x, color='blue', linestyle='-', label=f'Mean: {peak_x:.2f}', linewidth=0.8)
+    plt.text(peak_x, y_position, f'  {peak_x * 100:.2f}%', horizontalalignment='center', color='blue', fontsize=10)
+
+    # y軸を非表示に設定
+    plt.yticks([])
+    plt.ylabel('')
+
+    # 横軸をパーセント表示に設定
+    plt.gca().xaxis.set_major_formatter(PercentFormatter(1))
+
+    # グラフの枠（スパイン）を消去
+    for spine in ['top', 'right', 'left', 'bottom']:
+        plt.gca().spines[spine].set_visible(False)
+
+    # レイアウト調整
+    plt.tight_layout()
+
+    return plt, peak_x
+
+def image_base64_kde_with_axvline(x):
+    import pickle
+    from io import BytesIO
+    import base64
+    import matplotlib
+    matplotlib.use('Agg')
+
+    print(f"loading {config.pred_validd_file}")
+    with open(config.pred_validd_file, "rb") as f:
+        pred_valid_x = pickle.load(f)
+    print(f"ploting")
+    plt, peak_x = plot_kde_with_peak(pred_valid_x)
+
+    y_position = plt.ylim()[1] * 0.90
+    plt.axvline(x, color='crimson', linestyle='--', label=f'Mean: {x:.2f}', linewidth=0.8)
+    if x < peak_x:
+        plt.text(x, y_position, f'{x * 100:.2f}%', horizontalalignment='right', color='crimson', fontsize=10)
     else:
-        save_racefeat()
-        
-        # 全ての.featherファイルを読み込み、結合
-        print("Loadinlsg racefeat/*.feather")
-        df_race = pl.scan_ipc("racefeat/*.feather").collect()
+        plt.text(x, y_position, f'  {x * 100:.2f}%', horizontalalignment='left', color='crimson', fontsize=10)
 
-        print(f"Saving race features to {config.racefeat_file}.")
-        df_race.write_ipc(config.racefeat_file)
-        print(f"Successfully saved race features to {config.racefeat_file}.")
+    # 画像をバッファに保存して返す
+    print(f"saving image to buffer")
+    buf = BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    plt.close()
 
-    # 馬券の的中率を予測する
-    import train
-    from loguru import logger
-    from datetime import datetime
+    # バッファの内容をBase64にエンコード
+    image_base64 = base64.b64encode(buf.getvalue()).decode("utf-8")
 
-    now = datetime.now().strftime('%Y%m%d_%H%M')
-    logger.add(f"temp/bakenhit_{now}.log")
+    return image_base64
 
-    df_race = df_race.to_pandas()
-    bakenhit_config = config.bakenhit_lgb_reg
-    noneed = ["race_id", "race_date"] + config.NONEED_COLUMNS
-    train_x = df_race.query(bakenhit_config.train).drop(columns=noneed, errors="ignore")
-    logger.info("len(train_x): ", len(train_x))
-    train_y = train_x.pop(bakenhit_config.target)
-    valid_x = df_race.query(bakenhit_config.valid).drop(columns=noneed, errors="ignore")
-    valid_y = valid_x.pop(bakenhit_config.target)
-    model = train.lightgbm_model(bakenhit_config, train_x, train_y, valid_x, valid_y)
-    logger.info(pd.Series(model.feature_importance(importance_type='gain'), index=model.feature_name()).sort_values(ascending=False)[:50])
+if __name__ == "__main__":
+    if not Path(config.pred_validd_file).exists():
+        if Path(config.racefeat_file).exists():
+            print(f"Already exists {config.racefeat_file}.")
+            df_race = pl.read_ipc(config.racefeat_file)
+        else:
+            save_racefeat()
+            
+            # 全ての.featherファイルを読み込み、結合
+            print("Loadinlsg racefeat/*.feather")
+            df_race = pl.scan_ipc("racefeat/*.feather").collect()
 
-    import numpy as np
-    from sklearn.metrics import mean_squared_error
-    pred_valid_x = model.predict(valid_x, num_iteration=model.best_iteration)
-    rmse = np.sqrt(mean_squared_error(valid_y, pred_valid_x))
-    logger.info(f'Validation RMSE: {rmse:.4f}')
+            print(f"Saving race features to {config.racefeat_file}.")
+            df_race.write_ipc(config.racefeat_file)
+            print(f"Successfully saved race features to {config.racefeat_file}.")
+
+        # 馬券の的中率を予測する
+        import train
+        from loguru import logger
+        from datetime import datetime
+
+        now = datetime.now().strftime('%Y%m%d_%H%M')
+        logger.add(f"temp/bakenhit_{now}.log")
+
+        df_race = df_race.to_pandas()
+        bakenhit_config = config.bakenhit_lgb_reg
+        noneed = ["race_id", "race_date"] + config.NONEED_COLUMNS
+        train_x = df_race.query(bakenhit_config.train).drop(columns=noneed, errors="ignore")
+        logger.info("len(train_x): ", len(train_x))
+        train_y = train_x.pop(bakenhit_config.target)
+        valid_x = df_race.query(bakenhit_config.valid).drop(columns=noneed, errors="ignore")
+        valid_y = valid_x.pop(bakenhit_config.target)
+        model = train.lightgbm_model(bakenhit_config, train_x, train_y, valid_x, valid_y)
+        logger.info(pd.Series(model.feature_importance(importance_type='gain'), index=model.feature_name()).sort_values(ascending=False)[:50])
+
+        import numpy as np
+        from sklearn.metrics import mean_squared_error
+        pred_valid_x = model.predict(valid_x, num_iteration=model.best_iteration)
+        rmse = np.sqrt(mean_squared_error(valid_y, pred_valid_x))
+        logger.info(f'Validation RMSE: {rmse:.4f}')
+
+        with open(config.pred_validd_file, 'wb') as f:
+            pickle.dump(pred_valid_x, f)
+    elif Path(config.pred_validd_file).exists():
+        with open(config.pred_validd_file, "rb") as f:
+            pred_valid_x = pickle.load(f)
+
+        import matplotlib
+        matplotlib.use('MacOSX')
+        plt, peak_x = plot_kde_with_peak(pred_valid_x)
+        y_position = plt.ylim()[1] * 0.90
+        x = 0.925
+        plt.axvline(x, color='crimson', linestyle='--', label=f'Mean: {x:.2f}', linewidth=0.8)
+        if x < peak_x:
+            plt.text(x, y_position, f'{x * 100:.2f}%', horizontalalignment='right', color='crimson', fontsize=10)
+        else:
+            plt.text(x, y_position, f'  {x * 100:.2f}%', horizontalalignment='left', color='crimson', fontsize=10)
+        plt.show()

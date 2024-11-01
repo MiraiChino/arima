@@ -15,6 +15,7 @@ rating_file = f'temp/rating{from_date}_{to_date}.feather'
 feat_file = f'feature{from_date}_{to_date}.feather'
 breakpoint_file = f'breakpoint{from_date}_{to_date}.pickle'
 racefeat_file = f'racefeat{from_date}_{to_date}.feather'
+pred_validd_file = f'pred_valid{from_date}_{to_date}.pickle'
 
 NONEED_COLUMNS = [
     'id', 'result', 'time', 'margin', 'pop', 'odds', 'last3f', \

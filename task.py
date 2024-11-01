@@ -10,6 +10,7 @@ from domonic.html import *
 import css
 import netkeiba
 import predict
+from bakenhit import image_base64_kde_with_axvline
 
 DONE = "-- DONE"
 NO_ID = 'no_id'
@@ -120,16 +121,19 @@ class CreateBakenHTML(Task):
             self.logs.append(f"{traceback.format_exc()}")
         base_url = next_url.split('/result')[0]
 
+        self.logs.append(f"creating bakenhit kde plot")
+        image_base64 = image_base64_kde_with_axvline(x=bakenhit_prob)
         try:
             baken = predict.calc_odds(baken, race_id, top, self.logs)
             self.logs.append(f"calculating good baken")
             baken = predict.pretty_baken(baken, top)
             baken = predict.good_baken(baken, odd_th)
+
             self.logs.append(f"creating {baken_html}")
         except Exception as e:
             self.logs.append(f"{traceback.format_exc()}")
             with open(f"{race_id}.predict", 'rb') as f:
-                baken, r = pickle.load(f)
+                baken, bakenhit_prob, r = pickle.load(f)
             baken = predict.pretty_prob(baken, top)
             pagebody = body(
                 a(f"オッズの更新 /update/{race_id}", _href=f"{base_url}/update/{race_id}"),
@@ -137,6 +141,7 @@ class CreateBakenHTML(Task):
                 div(f"{r.start_time}発走 / {r.field}{r.distance}m ({r.turn}) / 天候:{r.weather} / 馬場:{r.field_condition}"),
                 div(f"{r.race_condition} / 本賞金:{r.prize1},{r.prize2},{r.prize3},{r.prize4},{r.prize5}万円"),
                 hr(),
+                img(src=f"data:image/png;base64,{image_base64}"),
                 h3(f"馬券の的中率: {bakenhit_prob:.2%} "),
                 div(f"※予測トップ3の各馬券（単勝1枚,複勝3枚,ワイド3枚,馬連1枚,馬単1枚,3連複1枚,3連単1枚）計11枚を買ったときに当たる馬券枚数の期待値"),
                 hr(),
@@ -162,6 +167,7 @@ class CreateBakenHTML(Task):
                 div(f"{r.start_time}発走 / {r.field}{r.distance}m ({r.turn}) / 天候:{r.weather} / 馬場:{r.field_condition}"),
                 div(f"{r.race_condition} / 本賞金:{r.prize1},{r.prize2},{r.prize3},{r.prize4},{r.prize5}万円"),
                 hr(),
+                img(src=f"data:image/png;base64,{image_base64}"),
                 h3(f"馬券の的中率: {bakenhit_prob:.2%} "),
                 div(f"※予測トップ3の各馬券（単勝1枚,複勝3枚,ワイド3枚,馬連1枚,馬単1枚,3連複1枚,3連単1枚）計11枚を買ったときに当たる馬券枚数の期待値"),
                 hr(),

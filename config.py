@@ -262,6 +262,17 @@ l1_rf_regression = Dict(
     }
 )
 
+# Layer1: KNeighbors Regression
+l1_kn_regression = Dict(
+    train=dataset_query.layer1_train,
+    valid=dataset_query.layer1_valid,
+    file=f'knprize_{from_date}_{to_date}.pickle',
+    target='prizeper',
+    params={
+        'k': 5,
+    }
+)
+
 # Layer1: LogisticRegression Classification
 l1_lr_classification = Dict(
     train=dataset_query.layer1_train,
@@ -281,7 +292,6 @@ l1_gnb_classification = Dict(
     target='score',
     params={
     }
-)
 
 l1_models = [
     l1_lgb_rank_prize1,
@@ -292,14 +302,15 @@ l1_models = [
     l1_lgb_rank_score5,
     l1_lgb_regprize,
     l1_lgb_regscore,
-    # l1_sgd_regscore,
+    l1_sgd_regscore,
     l1_lasso_regression,
     l1_ard_regression,
     l1_huber_regression,
     l1_br_regression,
     # l1_etr_regression,
     l1_en_regression,
-    # l1_rf_regression,
+    l1_rf_regression,
+    l1_kn_regression,
     # l1_lr_classification,
     # l1_gnb_classification,
 ]

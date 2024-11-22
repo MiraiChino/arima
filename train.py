@@ -11,12 +11,14 @@ from torch.utils.tensorboard import SummaryWriter
 from lightgbm import Dataset
 from sklearn.linear_model import LassoCV, SGDRegressor, ARDRegression, HuberRegressor, BayesianRidge, ElasticNet, LogisticRegression
 from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestRegressor
 # from sklearn.ensemble import ExtraTreesRegressor, RandomForestRegressor
 # from sklearn.svm import LinearSVR
 # from sklearn.naive_bayes import GaussianNB
 from sklearn.metrics import ndcg_score, mean_squared_error
 
 import config
+from knn import UsearchKNeighborsRegressor
 
 
 class LogSummaryWriterCallback:
@@ -193,6 +195,23 @@ def regression(model_class, df, config, scaler=None):
     logger.info(f'Validation RMSE: {rmse:.4f}')
     return model, pred_valid_x
 
+def knn_regression(model_class, df, config, scaler=None):
+    logger.info(f'model: {config}')
+    train_x, train_y, _, valid_x, valid_y, _ = prepare_train_valid_dataset(df, config)
+    model_file = Path(f'models/{config.file}')
+
+    if model_file.exists():
+        model = UsearchKNeighborsRegressor()
+        model.load(model_file)
+    else:
+        model = train_model(model_class, train_x, train_y, config.params, scaler)
+        model.save(model_file)
+
+    logger.info('Predicting on validation set...')
+    pred_valid_x = model.predict(valid_x)
+    rmse = np.sqrt(mean_squared_error(valid_y, pred_valid_x))
+    logger.info(f'Validation RMSE: {rmse:.4f}')
+    return model, pred_valid_x
 
 def classification_as_regression(model_class, df, config, scaler=None):
     logger.info(f'model: {config}')
@@ -315,11 +334,11 @@ if __name__ == "__main__":
     l2_preds_i.append(l2_pred)
 
     # Layer 1: SGD Regressor
-    # logger.info(f'--- Layer 1: SGD Regressor ---')
-    # sgd_regression, l1_pred = regression(SGDRegressor, df=df_feat, config=config.l1_sgd_regression, scaler=scaler)
-    # l2_pred = sgd_regression.predict(scaled_l2_valid_x)
-    # l1_preds_i.append(l1_pred)
-    # l2_preds_i.append(l2_pred)
+    logger.info(f'--- Layer 1: SGD Regressor ---')
+    sgd_regression, l1_pred = regression(SGDRegressor, df=df_feat, config=config.l1_sgd_regression, scaler=scaler)
+    l2_pred = sgd_regression.predict(scaled_l2_valid_x)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
 
     # Layer 1: Lasso Regression
     logger.info(f'--- Layer 1: Lasso Regression ---')
@@ -364,11 +383,18 @@ if __name__ == "__main__":
     l2_preds_i.append(l2_pred)
 
     # Layer 1: RandomForest Regression
-    # logger.info(f'--- Layer 1: RandomForest Regression ---')
-    # randomforest, l1_pred = regression(RandomForestRegressor, df=df_feat, config=config.l1_rf_regression)
-    # l2_pred = randomforest.predict(scaled_l2_valid_x)
-    # l1_preds_i.append(l1_pred)
-    # l2_preds_i.append(l2_pred)
+    logger.info(f'--- Layer 1: RandomForest Regression ---')
+    randomforest, l1_pred = regression(RandomForestRegressor, df=df_feat, config=config.l1_rf_regression)
+    l2_pred = randomforest.predict(scaled_l2_valid_x)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
+
+    # Layer 1: KNeighbors Regression
+    logger.info(f'--- Layer 1: KNeighbors Regression ---')
+    kn_regression, l1_pred = knn_regression(UsearchKNeighborsRegressor, df=df_feat, config=config.l1_kn_regression)
+    l2_pred = kn_regression.predict(l2_valid_x)
+    l1_preds_i.append(l1_pred)
+    l2_preds_i.append(l2_pred)
 
     # Layer 1: LogisticRegression Classification
     # logger.info(f'--- Layer 1: LogisticRegression Classification ---')

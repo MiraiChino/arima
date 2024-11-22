@@ -17,6 +17,8 @@ import config
 import featlist
 import feature
 import netkeiba
+from knn import UsearchKNeighborsRegressor
+
 
 scaler = None
 l1_models = {}
@@ -158,9 +160,13 @@ def load_models_and_configs(task_logs=[]):
         model_name = re_modelfile.match(model_file).groups()[0]
         task_logs.append(f"loading {model_name}")
         if model_name not in l1_models:
-            with open(model_file, "rb") as f:
-                model = pickle.load(f)
-                l1_models[model_name] = model
+            if "kn" in model_name:
+                model = UsearchKNeighborsRegressor()
+                model.load(model_file)
+            else:
+                with open(model_file, "rb") as f:
+                    model = pickle.load(f)
+            l1_models[model_name] = model
 
     if not l2_model:
         model_file = f"models/{config.l2_stacking_lgb_rank.file}"
@@ -299,6 +305,8 @@ def result_prob(df_feat, task_logs=[]):
                 pred = model.predict(scaler.transform(df_feat))
             elif "rf" in model_name:
                 pred = model.predict(df_feat[model.feature_names_in_])
+            elif "kn" in model_name:
+                pred = model.predict(df_feat)
             elif "lr" in model_name:
                 model, class_labels = model
                 pred = classification_to_regression(model, class_labels, df_feat[scaler.feature_names_in_])

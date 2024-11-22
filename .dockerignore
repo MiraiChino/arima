@@ -20,5 +20,4 @@ ave*.feather
 *.html
 *.predict
 +.log
-bakenhit.py
 racefeat*.feather

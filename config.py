@@ -319,6 +319,7 @@ l1_gnb_classification = Dict(
     target='score',
     params={
     }
+)
 
 l1_models = [
     l1_lgb_rank_prize1,
@@ -329,7 +330,7 @@ l1_models = [
     l1_lgb_rank_score5,
     l1_lgb_regprize,
     l1_lgb_regscore,
-    l1_sgd_regscore,
+    l1_sgd_regression,
     l1_lasso_regression,
     l1_ard_regression,
     l1_huber_regression,

@@ -43,6 +43,33 @@ dataset_query = Dict(
     valid="'2022-01-01' <= race_date <= '2024-12-31'",
 )
 
+layer1_splits = [
+    Dict(
+        train="'2008-01-01' <= race_date <= '2010-12-31'",
+        valid="'2011-01-01' <= race_date <= '2012-12-31'",
+    ),
+    Dict(
+        train="'2008-01-01' <= race_date <= '2012-12-31'",
+        valid="'2013-01-01' <= race_date <= '2014-12-31'",
+    ),
+    Dict(
+        train="'2008-01-01' <= race_date <= '2014-12-31'",
+        valid="'2015-01-01' <= race_date <= '2016-12-31'",
+    ),
+    Dict(
+        train="'2008-01-01' <= race_date <= '2016-12-31'",
+        valid="'2017-01-01' <= race_date <= '2018-12-31'",
+    ),
+    Dict(
+        train="'2008-01-01' <= race_date <= '2018-12-31'",
+        valid="'2019-01-01' <= race_date <= '2020-12-31'",
+    ),
+    Dict(
+        train="'2008-01-01' <= race_date <= '2020-12-31'",
+        valid="'2021-01-01' <= race_date <= '2022-12-31'",
+    ),
+]
+
 scaler_file = f'scaler_{from_date}_{to_date}.pickle'
 
 # Layer1: LightGBM LambdaRank Prize1
@@ -313,6 +340,27 @@ l1_models = [
     l1_kn_regression,
     # l1_lr_classification,
     # l1_gnb_classification,
+]
+l1_model_columns = [
+    "lgbrankprize1",
+    "lgbrankprize3",
+    "lgbrankprize5",
+    "lgbrankscore1",
+    "lgbrankscore3",
+    "lgbrankscore5",
+    "lgbregprize",
+    "lgbregscore",
+    "sgd",
+    "lasso",
+    "ard",
+    "huber",
+    "bayesianridge",
+    # "extratrees",
+    "elasticnet",
+    "randomforest",
+    "kn",
+    # "logisticreg",
+    # "gaussiannb",
 ]
 
 # Layer2: Stacking model: LightGBM LambdaRank

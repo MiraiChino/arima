@@ -46,10 +46,11 @@ PLACE = {
     9: "阪神",
     10: "小倉",
 }
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100',
+}
 
 netkeiba_date = re.compile(r"netkeiba(\d+)-(\d+).*")
-
-
 
 def scraping(func):
     @wraps(func)
@@ -72,7 +73,7 @@ def soup(html_text):
 def scrape_racedates(year, month):
     calendar_url = f"{BASE_URL}/top/calendar.html?year={year}&month={month}"
     print(f"scraping: {calendar_url}")
-    calendar_html = requests.get(calendar_url)
+    calendar_html = requests.get(calendar_url, headers=headers)
     if table := soup_html(calendar_html).find(class_="Calendar_Table"):
         elems = table.find_all("td", class_="RaceCellBox")
         for elem in elems:
@@ -100,7 +101,7 @@ def scrape_raceids(driver, race_date):
 def scrape_results(race_id):
     race_url = f"{BASE_URL}/race/result.html?race_id={race_id}&rf=race_list"
     print(f"scraping: {race_url}")
-    race_html = requests.get(race_url)
+    race_html = requests.get(race_url, headers=headers)
     s = soup_html(race_html)
     racename_div = s.find("div", class_="RaceName")
     racename_h1 = s.find("h1", class_="RaceName")
@@ -125,7 +126,7 @@ def scrape_results(race_id):
 def scrape_shutuba(race_id):
     shutuba_url = f"{BASE_URL}/race/shutuba.html?race_id={race_id}"
     print(f"scraping: {shutuba_url}")
-    shutuba_html = requests.get(shutuba_url)
+    shutuba_html = requests.get(shutuba_url, headers=headers)
     s = soup_html(shutuba_html)
     racename_div = s.find("div", class_="RaceName")
     racename_h1 = s.find("h1", class_="RaceName")

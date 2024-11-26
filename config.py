@@ -76,6 +76,7 @@ scaler_file = f'scaler_{from_date}_{to_date}.pickle'
 l1_lgb_rank_prize1 = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='lgbrankprize1',
     file=f'lgbrankprize1_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
@@ -92,6 +93,7 @@ l1_lgb_rank_prize1 = Dict(
 l1_lgb_rank_prize3 = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='lgbrankprize3',
     file=f'lgbrankprize3_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
@@ -108,6 +110,7 @@ l1_lgb_rank_prize3 = Dict(
 l1_lgb_rank_prize5 = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='lgbrankprize5',
     file=f'lgbrankprize5_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
@@ -124,6 +127,7 @@ l1_lgb_rank_prize5 = Dict(
 l1_lgb_rank_score1 = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='lgbrankscore1',
     file=f'lgbrankscore1_{from_date}_{to_date}.pickle',
     target='score',
     params={
@@ -140,6 +144,7 @@ l1_lgb_rank_score1 = Dict(
 l1_lgb_rank_score3 = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='lgbrankscore3',
     file=f'lgbrankscore3_{from_date}_{to_date}.pickle',
     target='score',
     params={
@@ -156,6 +161,7 @@ l1_lgb_rank_score3 = Dict(
 l1_lgb_rank_score5 = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='lgbrankscore5',
     file=f'lgbrankscore5_{from_date}_{to_date}.pickle',
     target='score',
     params={
@@ -171,6 +177,7 @@ l1_lgb_rank_score5 = Dict(
 l1_lgb_regprize = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='lgbregprize',
     file=f'lgbregprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
@@ -185,6 +192,7 @@ l1_lgb_regprize = Dict(
 l1_lgb_regscore = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='lgbregscore',
     file=f'lgbregscore_{from_date}_{to_date}.pickle',
     target='score',
     params={
@@ -199,6 +207,7 @@ l1_lgb_regscore = Dict(
 l1_sgd_regression = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='sgdrprize',
     file=f'sgdrprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
@@ -210,6 +219,7 @@ l1_sgd_regression = Dict(
 l1_lasso_regression = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='lassoprize',
     file=f'lassoprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
@@ -222,6 +232,7 @@ l1_lasso_regression = Dict(
 l1_ard_regression = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='ardprize',
     file=f'ardprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
@@ -233,6 +244,7 @@ l1_ard_regression = Dict(
 l1_huber_regression = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='huberprize',
     file=f'huberprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
@@ -243,6 +255,7 @@ l1_huber_regression = Dict(
 l1_br_regression = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='brprize',
     file=f'brprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
@@ -253,6 +266,7 @@ l1_br_regression = Dict(
 l1_etr_regression = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='etrprize',
     file=f'etrprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
@@ -268,6 +282,7 @@ l1_etr_regression = Dict(
 l1_en_regression = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='enprize',
     file=f'enprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
@@ -278,6 +293,7 @@ l1_en_regression = Dict(
 l1_rf_regression = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='rfregprize',
     file=f'rfregprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
@@ -293,6 +309,7 @@ l1_rf_regression = Dict(
 l1_kn_regression = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='knprize',
     file=f'knprize_{from_date}_{to_date}.pickle',
     target='prizeper',
     params={
@@ -304,6 +321,7 @@ l1_kn_regression = Dict(
 l1_lr_classification = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='lrclsscore',
     file=f'lrclsscore_{from_date}_{to_date}.pickle',
     target='score',
     params={
@@ -315,6 +333,7 @@ l1_lr_classification = Dict(
 l1_gnb_classification = Dict(
     train=dataset_query.layer1_train,
     valid=dataset_query.layer1_valid,
+    model_name='gnbclsscore',
     file=f'gnbclsscore_{from_date}_{to_date}.pickle',
     target='score',
     params={
@@ -331,7 +350,7 @@ l1_models = [
     l1_lgb_regprize,
     l1_lgb_regscore,
     l1_sgd_regression,
-    l1_lasso_regression,
+    # l1_lasso_regression,
     l1_ard_regression,
     l1_huber_regression,
     l1_br_regression,
@@ -341,27 +360,6 @@ l1_models = [
     l1_kn_regression,
     # l1_lr_classification,
     # l1_gnb_classification,
-]
-l1_model_columns = [
-    "lgbrankprize1",
-    "lgbrankprize3",
-    "lgbrankprize5",
-    "lgbrankscore1",
-    "lgbrankscore3",
-    "lgbrankscore5",
-    "lgbregprize",
-    "lgbregscore",
-    "sgd",
-    "lasso",
-    "ard",
-    "huber",
-    "bayesianridge",
-    # "extratrees",
-    "elasticnet",
-    "randomforest",
-    "kn",
-    # "logisticreg",
-    # "gaussiannb",
 ]
 
 # Layer2: Stacking model: LightGBM LambdaRank
@@ -382,7 +380,7 @@ l2_stacking_lgb_rank = Dict(
 
 # 馬券的中率を予測するモデル
 bakenhit_lgb_reg = Dict(
-    feature_importance_model=l1_lgb_regprize.file,
+    feature_importance_model=l1_lgb_regprize,
     feature_importance_len=100, # 300個x10binで68GBにてOOM
     bins=10,
     train=dataset_query.train,

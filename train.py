@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+import itertools
 
 import dill as pickle
 import lightgbm
@@ -263,30 +264,34 @@ if __name__ == "__main__":
     df_feat['prizeper'] = df_feat['prize'].map(percent_prize(lower9, middle9, upper9))
 
     l2_valid_x, l2_valid_y, l2_valid_query = prepare_dataset(df_feat.query(config.l2_stacking_lgb_rank.valid), target=config.l2_stacking_lgb_rank.target)
+    l2_train_x, l2_train_y, l2_train_query = prepare_dataset(df_feat.query(config.l2_stacking_lgb_rank.train), target=config.l2_stacking_lgb_rank.target)
 
     ## Layer 1
     predicted_l1_valid_xs = []
     predicted_l2_valid_xs = []
     l1_valid_xs = []
     l1_valid_ys = []
+    l1_preds_i = []
+    l2_preds_i = []
+    # queries = []
 
     # Scaler
     logger.info(f'--- Scaler ---')
     scaler = standard_scaler()
     scaled_l2_valid_x = scaler.transform(l2_valid_x)
+    scaled_l2_train_x = scaler.transform(l2_train_x)
 
     for i, query in enumerate(config.layer1_splits):
-        l1_preds_i = []
-        l2_preds_i = []
 
         for l1_model in config.l1_models:
             l1_model.train = query.train
             l1_model.valid = query.valid
-            l1_model.file = f"{i}_{l1_model.file}"
+            l1_model.file = f"{i}_{l1_model.model_name}_{config.from_date}_{config.to_date}.pickle"
 
         # Layer 1: LightGBM LambdaRank Prize1
         logger.info(f'--- Layer 1: LightGBM LambdaRank Prize1 ---')
         lgb_rank_prize1, l1_pred = lgb(df=df_feat, config=config.l1_lgb_rank_prize1)
+        l1_pred = lgb_rank_prize1.predict(l2_train_x, num_iteration=lgb_rank_prize1.best_iteration)
         l2_pred = lgb_rank_prize1.predict(l2_valid_x, num_iteration=lgb_rank_prize1.best_iteration)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
@@ -294,6 +299,7 @@ if __name__ == "__main__":
         # Layer 1: LightGBM LambdaRank Prize3
         logger.info(f'--- Layer 1: LightGBM LambdaRank Prize3 ---')
         lgb_rank_prize3, l1_pred = lgb(df=df_feat, config=config.l1_lgb_rank_prize3)
+        l1_pred = lgb_rank_prize3.predict(l2_train_x, num_iteration=lgb_rank_prize3.best_iteration)
         l2_pred = lgb_rank_prize3.predict(l2_valid_x, num_iteration=lgb_rank_prize3.best_iteration)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
@@ -301,6 +307,7 @@ if __name__ == "__main__":
         # Layer 1: LightGBM LambdaRank Prize5
         logger.info(f'--- Layer 1: LightGBM LambdaRank Prize5 ---')
         lgb_rank_prize5, l1_pred = lgb(df=df_feat, config=config.l1_lgb_rank_prize5)
+        l1_pred = lgb_rank_prize5.predict(l2_train_x, num_iteration=lgb_rank_prize5.best_iteration)
         l2_pred = lgb_rank_prize5.predict(l2_valid_x, num_iteration=lgb_rank_prize5.best_iteration)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
@@ -308,6 +315,7 @@ if __name__ == "__main__":
         # Layer 1: LightGBM LambdaRank Score1
         logger.info(f'--- Layer 1: LightGBM LambdaRank Score1 ---')
         lgb_rank_score1, l1_pred = lgb(df=df_feat, config=config.l1_lgb_rank_score1)
+        l1_pred = lgb_rank_score1.predict(l2_train_x, num_iteration=lgb_rank_score1.best_iteration)
         l2_pred = lgb_rank_score1.predict(l2_valid_x, num_iteration=lgb_rank_score1.best_iteration)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
@@ -315,6 +323,7 @@ if __name__ == "__main__":
         # Layer 1: LightGBM LambdaRank Score3
         logger.info(f'--- Layer 1: LightGBM LambdaRank Score3 ---')
         lgb_rank_score3, l1_pred = lgb(df=df_feat, config=config.l1_lgb_rank_score3)
+        l1_pred = lgb_rank_score3.predict(l2_train_x, num_iteration=lgb_rank_score3.best_iteration)
         l2_pred = lgb_rank_score3.predict(l2_valid_x, num_iteration=lgb_rank_score3.best_iteration)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
@@ -322,6 +331,7 @@ if __name__ == "__main__":
         # Layer 1: LightGBM LambdaRank Score5
         logger.info(f'--- Layer 1: LightGBM LambdaRank Score5 ---')
         lgb_rank_score5, l1_pred = lgb(df=df_feat, config=config.l1_lgb_rank_score5)
+        l1_pred = lgb_rank_score5.predict(l2_train_x, num_iteration=lgb_rank_score5.best_iteration)
         l2_pred = lgb_rank_score5.predict(l2_valid_x, num_iteration=lgb_rank_score5.best_iteration)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
@@ -329,6 +339,7 @@ if __name__ == "__main__":
         # Layer 1: LightGBM Regression Prize
         logger.info(f'--- Layer 1: LightGBM Regression Prize ---')
         lgb_regprize, l1_pred = lgb(df=df_feat, config=config.l1_lgb_regprize, reg=True)
+        l1_pred = lgb_regprize.predict(l2_train_x, num_iteration=lgb_regprize.best_iteration)
         l2_pred = lgb_regprize.predict(l2_valid_x, num_iteration=lgb_regprize.best_iteration)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
@@ -336,6 +347,7 @@ if __name__ == "__main__":
         # Layer 1: LightGBM Regression Score
         logger.info(f'--- Layer 1: LightGBM Regression Score ---')
         lgb_regscore, l1_pred = lgb(df=df_feat, config=config.l1_lgb_regscore, reg=True)
+        l1_pred = lgb_regscore.predict(l2_train_x, num_iteration=lgb_regscore.best_iteration)
         l2_pred = lgb_regscore.predict(l2_valid_x, num_iteration=lgb_regscore.best_iteration)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
@@ -343,20 +355,22 @@ if __name__ == "__main__":
         # Layer 1: SGD Regressor
         logger.info(f'--- Layer 1: SGD Regressor ---')
         sgd_regression, l1_pred = regression(SGDRegressor, df=df_feat, config=config.l1_sgd_regression, scaler=scaler)
+        l1_pred = sgd_regression.predict(scaled_l2_train_x)
         l2_pred = sgd_regression.predict(scaled_l2_valid_x)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
 
         # Layer 1: Lasso Regression
-        logger.info(f'--- Layer 1: Lasso Regression ---')
-        lasso, l1_pred = regression(LassoCV, df=df_feat, config=config.l1_lasso_regression, scaler=scaler)
-        l2_pred = lasso.predict(scaled_l2_valid_x)
-        l1_preds_i.append(l1_pred)
-        l2_preds_i.append(l2_pred)
+        # logger.info(f'--- Layer 1: Lasso Regression ---')
+        # lasso, l1_pred = regression(LassoCV, df=df_feat, config=config.l1_lasso_regression, scaler=scaler)
+        # l2_pred = lasso.predict(scaled_l2_valid_x)
+        # l1_preds_i.append(l1_pred)
+        # l2_preds_i.append(l2_pred)
 
         # Layer1: ARD Regression
         logger.info(f'--- Layer 1: ARD Regression ---')
         ard, l1_pred = regression(ARDRegression, df=df_feat, config=config.l1_ard_regression, scaler=scaler)
+        l1_pred = ard.predict(scaled_l2_train_x)
         l2_pred = ard.predict(scaled_l2_valid_x)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
@@ -364,6 +378,7 @@ if __name__ == "__main__":
         # Layer1: Huber Regression
         logger.info(f'--- Layer 1: Huber Regression ---')
         huber, l1_pred = regression(HuberRegressor, df=df_feat, config=config.l1_huber_regression, scaler=scaler)
+        l1_pred = huber.predict(scaled_l2_train_x)
         l2_pred = huber.predict(scaled_l2_valid_x)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
@@ -371,6 +386,7 @@ if __name__ == "__main__":
         # Layer 1: BayesianRidge Regression
         logger.info(f'--- Layer 1: BayesianRidge Regression ---')
         bayesian_ridge, l1_pred = regression(BayesianRidge, df=df_feat, config=config.l1_br_regression, scaler=scaler)
+        l1_pred = bayesian_ridge.predict(scaled_l2_train_x)
         l2_pred = bayesian_ridge.predict(scaled_l2_valid_x)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
@@ -378,6 +394,7 @@ if __name__ == "__main__":
         # Layer 1: ExtraTreesRegressor
         # logger.info(f'--- Layer 1: ExtraTreesRegressor ---')
         # extra_tree, l1_pred = regression(ExtraTreesRegressor, df=df_feat, config=config.l1_etr_regression)
+        # l1_pred = extra_tree.predict(l2_train_x)
         # l2_pred = extra_tree.predict(l2_valid_x)
         # l1_preds_i.append(l1_pred)
         # l2_preds_i.append(l2_pred)
@@ -385,6 +402,7 @@ if __name__ == "__main__":
         # Layer 1: ElasticNet
         logger.info(f'--- Layer 1: ElasticNet ---')
         elasticnet, l1_pred = regression(ElasticNet, df=df_feat, config=config.l1_en_regression, scaler=scaler)
+        l1_pred = elasticnet.predict(scaled_l2_train_x)
         l2_pred = elasticnet.predict(scaled_l2_valid_x)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
@@ -392,13 +410,15 @@ if __name__ == "__main__":
         # Layer 1: RandomForest Regression
         logger.info(f'--- Layer 1: RandomForest Regression ---')
         randomforest, l1_pred = regression(RandomForestRegressor, df=df_feat, config=config.l1_rf_regression)
-        l2_pred = randomforest.predict(scaled_l2_valid_x)
+        l1_pred = randomforest.predict(l2_train_x)
+        l2_pred = randomforest.predict(l2_valid_x)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
 
         # Layer 1: KNeighbors Regression
         logger.info(f'--- Layer 1: KNeighbors Regression ---')
         kn_regression, l1_pred = knn_regression(UsearchKNeighborsRegressor, df=df_feat, config=config.l1_kn_regression)
+        l1_pred = kn_regression.predict(l2_train_x)
         l2_pred = kn_regression.predict(l2_valid_x)
         l1_preds_i.append(l1_pred)
         l2_preds_i.append(l2_pred)
@@ -406,6 +426,7 @@ if __name__ == "__main__":
         # Layer 1: LogisticRegression Classification
         # logger.info(f'--- Layer 1: LogisticRegression Classification ---')
         # logi, class_labels, l1_pred = classification_as_regression(LogisticRegression, df=df_feat, config=config.l1_lr_classification, scaler=scaler)
+        # l1_pred = classification_to_regression(logi, class_labels, scaled_l2_train_x)
         # l2_pred = classification_to_regression(logi, class_labels, scaled_l2_valid_x)
         # l1_preds_i.append(l1_pred)
         # l2_preds_i.append(l2_pred)
@@ -413,31 +434,27 @@ if __name__ == "__main__":
         # Layer 1: Gaussian Naive Bayes Classification
         # logger.info(f'--- Layer 1: Gaussian Naive Bayes Classification ---')
         # gnb, class_labels, l1_pred = classification_as_regression(GaussianNB, df=df_feat, config=config.l1_gnb_classification, scaler=scaler)
+        # l1_pred = classification_to_regression(gnb, class_labels, scaled_l2_train_x)
         # l2_pred = classification_to_regression(gnb, class_labels, scaled_l2_valid_x)
         # l1_preds_i.append(l1_pred)
         # l2_preds_i.append(l2_pred)
 
-        predicted_l1_valid_xs.append(np.column_stack(l1_preds_i))
-        predicted_l2_valid_xs.append(np.column_stack(l2_preds_i))
-        l1_valid_query = query.valid
-        valid_x, valid_y, valid_query = prepare_dataset(df_feat.query(l1_valid_query), target=config.l2_stacking_lgb_rank.target)
-        l1_valid_xs.append(valid_x)
-        l1_valid_ys.append(valid_y)
-
+    predicted_l1_valid_xs.append(np.column_stack(l1_preds_i))
+    predicted_l2_valid_xs.append(np.column_stack(l2_preds_i))
+    
     # Layer2: Stacking LightGBM LambdaRank
     logger.info(f'--- Layer2: Stacking LightGBM LambdaRank ---')
     model = config.l2_stacking_lgb_rank
     logger.info(f'train: {model}')
 
-    train_x = np.hstack((np.vstack(l1_valid_xs), np.vstack(predicted_l1_valid_xs)))
-    train_y = np.hstack(l1_valid_ys)
-    l2_train_query = valid_query
-    valid_x = np.hstack((l2_valid_x, np.mean(predicted_l2_valid_xs, axis=0)))
+    train_x = np.hstack((l2_train_x, np.vstack(predicted_l1_valid_xs)))
+    train_y = np.hstack(l2_train_y)
+    valid_x = np.hstack((l2_valid_x, np.vstack(predicted_l2_valid_xs)))
     valid_y = l2_valid_y
     train = Dataset(train_x, train_y, group=l2_train_query)
     valid = Dataset(valid_x, valid_y, group=l2_valid_query)
 
-    columns = l2_valid_x.columns.tolist() + [f"{i}_{column}" for i, query in enumerate(config.layer1_splits) for column in config.l1_model_columns]
+    columns = l2_valid_x.columns.tolist() + [f"{i}_{c.model_name}" for i, query in enumerate(config.layer1_splits) for c in config.l1_models]
     m = lightgbm.train(
         model.params,
         train,
@@ -449,10 +466,11 @@ if __name__ == "__main__":
             LogSummaryWriterCallback(period=1, writer=SummaryWriter(log_dir=Path("temp", 'logs')))
         ],
     )
+    with open(f'models/{model.file}', 'wb') as f:
+        pickle.dump(m, f)
+
     logger.info(pd.Series(m.feature_importance(importance_type='gain'), index=columns).sort_values(ascending=False)[:50])
     logger.info('Predicting on validation set...')
     pred_valid_x = m.predict(valid_x, num_iteration=m.best_iteration)
     ndcg3 = nddcg_at(3, pred_valid_x, valid_y, l2_valid_query)
     logger.info(f'Validation NDCG@3: {ndcg3}')
-    with open(f'models/{model.file}', 'wb') as f:
-        pickle.dump(m, f)

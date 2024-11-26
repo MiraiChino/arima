@@ -3,6 +3,7 @@ import itertools
 import math
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
@@ -155,18 +156,19 @@ def load_models_and_configs(task_logs=[]):
         scaler = pickle.load(f)
 
     task_logs.append(f"loading models")
-    for model_config in config.l1_models:
-        model_file = f"models/{model_config.file}"
-        model_name = re_modelfile.match(model_file).groups()[0]
-        task_logs.append(f"loading {model_name}")
-        if model_name not in l1_models:
-            if "kn" in model_name:
-                model = UsearchKNeighborsRegressor()
-                model.load(model_file)
-            else:
-                with open(model_file, "rb") as f:
-                    model = pickle.load(f)
-            l1_models[model_name] = model
+    for i, query in enumerate(config.layer1_splits):
+        for model_config in config.l1_models:
+            model_file = f"models/{i}_{model_config.file}"
+            model_name = re_modelfile.match(model_file).groups()[0]
+            task_logs.append(f"loading {model_name}")
+            if model_name not in l1_models:
+                if "kn" in model_name:
+                    model = UsearchKNeighborsRegressor()
+                    model.load(model_file)
+                else:
+                    with open(model_file, "rb") as f:
+                        model = pickle.load(f)
+                l1_models[model_name] = model
 
     if not l2_model:
         model_file = f"models/{config.l2_stacking_lgb_rank.file}"
@@ -279,51 +281,57 @@ def result_prob(df_feat, task_logs=[]):
     preds = []
 
     # Layer 1 predictions
-    preds_l1 = []
-    for model_name, model in l1_models.items():
-        try:
-            if "lgb" in model_name:
-                values = df_feat[model.feature_name()].values
-                pred = model.predict(values, num_iteration=model.best_iteration)
-            elif "sgd" in model_name:
-                df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
-                pred = model.predict(scaler.transform(df_feat))
-            elif "ard" in model_name:
-                df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
-                pred = model.predict(scaler.transform(df_feat))
-            elif "huber" in model_name:
-                df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
-                pred = model.predict(scaler.transform(df_feat))
-            elif "br" in model_name:
-                df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
-                pred = model.predict(scaler.transform(df_feat))
-            elif "etr" in model_name:
-                df_feat = df_feat[model.feature_names_in_]
-                pred = model.predict(df_feat)
-            elif "en" in model_name:
-                df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
-                pred = model.predict(scaler.transform(df_feat))
-            elif "rf" in model_name:
-                pred = model.predict(df_feat[model.feature_names_in_])
-            elif "kn" in model_name:
-                pred = model.predict(df_feat)
-            elif "lr" in model_name:
-                model, class_labels = model
-                pred = classification_to_regression(model, class_labels, df_feat[scaler.feature_names_in_])
-            elif "gnb" in model_name:
-                model, class_labels = model
-                pred = classification_to_regression(model, class_labels, df_feat[scaler.feature_names_in_])
-            
-        except:
-            import traceback; print(traceback.format_exc())
-            import pdb; pdb.set_trace()
-        preds_l1.append(pred)
-        task_logs.append(f"{model_name}: {[f'{p*100:.1f}%' for p in probability(pred)]}")
-        preds.append(preds_l1)
+    for i, query in enumerate(config.layer1_splits):
+        preds_l1 = []
+        for model_config in config.l1_models:
+            model_file = f"models/{i}_{model_config.file}"
+            model_name = re_modelfile.match(model_file).groups()[0]
+            if model_name not in l1_models.keys():
+                continue
+            try:
+                model = l1_models[model_name]
+                if "lgb" in model_name:
+                    values = df_feat[model.feature_name()].values
+                    pred = model.predict(values, num_iteration=model.best_iteration)
+                elif "sgd" in model_name:
+                    df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
+                    pred = model.predict(scaler.transform(df_feat))
+                elif "ard" in model_name:
+                    df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
+                    pred = model.predict(scaler.transform(df_feat))
+                elif "huber" in model_name:
+                    df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
+                    pred = model.predict(scaler.transform(df_feat))
+                elif "br" in model_name:
+                    df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
+                    pred = model.predict(scaler.transform(df_feat))
+                elif "etr" in model_name:
+                    df_feat = df_feat[model.feature_names_in_]
+                    pred = model.predict(df_feat)
+                elif "en" in model_name:
+                    df_feat = df_feat.fillna(0)[scaler.feature_names_in_]
+                    pred = model.predict(scaler.transform(df_feat))
+                elif "rf" in model_name:
+                    pred = model.predict(df_feat[model.feature_names_in_])
+                elif "kn" in model_name:
+                    pred = model.predict(df_feat)
+                elif "lr" in model_name:
+                    model, class_labels = model
+                    pred = classification_to_regression(model, class_labels, df_feat[scaler.feature_names_in_])
+                elif "gnb" in model_name:
+                    model, class_labels = model
+                    pred = classification_to_regression(model, class_labels, df_feat[scaler.feature_names_in_])
+                
+            except:
+                import traceback; print(traceback.format_exc())
+                import pdb; pdb.set_trace()
+            task_logs.append(f"{model_name}: {[f'{p*100:.1f}%' for p in probability(pred)]}")
+            preds_l1.append(pred)
+        preds.append(np.column_stack(preds_l1))
 
     # Layer 2 prediction
-    stacked_feat = np.array(preds).mean(axis=1).T # (16, 4)
-    x = np.hstack([df_feat, stacked_feat]) # (16, 756)
+    stacked_feat = np.hstack(preds)
+    x = np.hstack([df_feat, stacked_feat])
     pred = l2_model.predict(x, num_iteration=l2_model.best_iteration)
     prob = probability(pred)
     task_logs.append(f"{l2_modelname}: {[f'{p*100:.1f}%' for p in probability(pred)]}")
@@ -356,10 +364,24 @@ def result_bakenhit(df_past, task_logs=[]):
     task_logs.append(f'loading {config.breakpoint_file}')
     with open(config.breakpoint_file, "rb") as f:
         breakpoints = pickle.load(f)
-    lgbregprize = l1_models["lgbregprize"]
+
+    
+    models_dir = Path("models/")
+    pattern = re.compile(rf"(\d+)_{config.bakenhit_lgb_reg.feature_importance_model.file}")
+    # 最大のiを探す
+    max_i = -1
+    for file in models_dir.iterdir():  # フォルダ内の全ファイルを探索
+        if file.is_file():  # ファイルのみを対象
+            match = pattern.match(file.name)
+            if match:
+                i = int(match.group(1))  # iを数値として取得
+                if i > max_i:
+                    max_i = i
+
+    feature_importance_model = l1_models[f"{max_i}_{config.bakenhit_lgb_reg.feature_importance_model.model_name}"]
     importance = pl.DataFrame({
-        "column": lgbregprize.feature_name(),
-        "importance": lgbregprize.feature_importance(importance_type='gain')
+        "column": feature_importance_model.feature_name(),
+        "importance": feature_importance_model.feature_importance(importance_type='gain')
     }).sort(by="importance", descending=True)
     importance_head = importance.head(config.bakenhit_lgb_reg.feature_importance_len)
     important_columns = importance_head.get_column("column").to_list()

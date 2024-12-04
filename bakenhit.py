@@ -3,6 +3,7 @@ import pdb
 import pickle
 import pandas as pd
 import polars as pl
+import re
 from pathlib import Path
 from tqdm import tqdm
 
@@ -87,8 +88,23 @@ def process_race(df, df_shutsuba, prob):
     return bakenhit
 
 def use_columns_from_importance():
-    print(f"loading models/{config.bakenhit_lgb_reg.feature_importance_model}")
-    with open(f"models/{config.bakenhit_lgb_reg.feature_importance_model}", "rb") as f:
+    models_dir = Path("models/")
+    pattern = re.compile(rf"(\d+)_{config.bakenhit_lgb_reg.feature_importance_model.file}")
+    # 最大のiを探す
+    max_i = -1
+    max_file = models_dir / f"0_{config.bakenhit_lgb_reg.feature_importance_model.file}"
+
+    for file in models_dir.iterdir():  # フォルダ内の全ファイルを探索
+        if file.is_file():  # ファイルのみを対象
+            match = pattern.match(file.name)
+            if match:
+                i = int(match.group(1))  # iを数値として取得
+                if i > max_i:
+                    max_i = i
+                    max_file = models_dir / file.name
+
+    print(f"loading {max_file}")
+    with open(f"{max_file}", "rb") as f:
         m = pickle.load(f)
         importance = pl.DataFrame({
             "column": m.feature_name(),
@@ -228,8 +244,8 @@ def image_base64_kde_with_axvline(x):
     import matplotlib
     matplotlib.use('Agg')
 
-    print(f"loading {config.pred_validd_file}")
-    with open(config.pred_validd_file, "rb") as f:
+    print(f"loading {config.bakenhit_lgb_reg.file}")
+    with open(config.bakenhit_lgb_reg.file, "rb") as f:
         pred_valid_x = pickle.load(f)
     print(f"ploting")
     plt, peak_x = plot_kde_with_peak(pred_valid_x)
@@ -254,7 +270,7 @@ def image_base64_kde_with_axvline(x):
     return image_base64
 
 if __name__ == "__main__":
-    if not Path(config.pred_validd_file).exists():
+    if not Path(config.bakenhit_lgb_reg.file).exists():
         if Path(config.racefeat_file).exists():
             print(f"Already exists {config.racefeat_file}.")
             df_race = pl.read_ipc(config.racefeat_file)
@@ -262,7 +278,7 @@ if __name__ == "__main__":
             save_racefeat()
             
             # 全ての.featherファイルを読み込み、結合
-            print("Loadinlsg racefeat/*.feather")
+            print("Loading racefeat/*.feather")
             df_race = pl.scan_ipc("racefeat/*.feather").collect()
 
             print(f"Saving race features to {config.racefeat_file}.")
@@ -294,10 +310,10 @@ if __name__ == "__main__":
         rmse = np.sqrt(mean_squared_error(valid_y, pred_valid_x))
         logger.info(f'Validation RMSE: {rmse:.4f}')
 
-        with open(config.pred_validd_file, 'wb') as f:
+        with open(config.bakenhit_lgb_reg.file, 'wb') as f:
             pickle.dump(pred_valid_x, f)
-    elif Path(config.pred_validd_file).exists():
-        with open(config.pred_validd_file, "rb") as f:
+    elif Path(config.bakenhit_lgb_reg.file).exists():
+        with open(config.bakenhit_lgb_reg.file, "rb") as f:
             pred_valid_x = pickle.load(f)
 
         import matplotlib

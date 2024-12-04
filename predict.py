@@ -202,6 +202,12 @@ def search_df_feat(df, task_logs=[]):
         pl.col('weight').cast(float),
         pl.col('time').cast(str),
     )
+    global horse_encoder, history
+    if horse_encoder is None:
+        with open(config.encoder_file, "rb") as f:
+            horse_encoder = pickle.load(f)
+    if history is None:
+        history = pl.read_ipc(config.feat_file)
     df_formatted = horse_encoder.format(df)
     df_encoded = horse_encoder.transform(df_formatted)
     df_encoded = df_encoded.with_columns([

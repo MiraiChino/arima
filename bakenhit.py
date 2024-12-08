@@ -63,7 +63,10 @@ def process_race(df, df_shutsuba, prob):
     df = pl.DataFrame(df)
     try:
         # 重複を削除
-        df_filtered = df.unique(subset="name", keep="first").sort(by="horse_no")
+        if len(df) == len(prob):
+            df_filtered = df
+        else:
+            df_filtered = df.unique(subset="name", keep="first").sort(by="horse_no")
 
         # 予測結果と実際の結果のデータフレームを作成
         s_prob = pl.Series([v for k, v in sorted(prob.items())])

@@ -1,5 +1,11 @@
 today=`date '+%Y%m%d'`
 echo $today
+rm *.pickle
+rm *.feather
+rm models/*.pickle
+rm models/*.index
+rm racefeat/*.feather
+
 echo python netkeiba.py
 python netkeiba.py
 echo python feature.py

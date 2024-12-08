@@ -10,6 +10,7 @@ catboost_info
 docker-compose.deploy.yml
 docker-compose.yml
 feat
+feather
 racefeat
 netkeiba
 temp

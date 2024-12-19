@@ -2,9 +2,7 @@ from addict import Dict
 
 # scraping
 from_date = '2008-01'
-to_date = '2024-11'
-netkeiba_horse_file = f'temp/netkeiba{from_date}_{to_date}.horses.feather'
-netkeiba_race_file = f'temp/netkeiba{from_date}_{to_date}.races.feather'
+to_date = '2024-12'
 netkeiba_file = f'feather/netkeiba{from_date}_{to_date}.feather'
 
 # feature extraction
@@ -15,7 +13,6 @@ rating_file = f'feather/rating{from_date}_{to_date}.feather'
 feat_file = f'feature{from_date}_{to_date}.feather'
 breakpoint_file = f'breakpoint{from_date}_{to_date}.pickle'
 racefeat_file = f'racefeat{from_date}_{to_date}.feather'
-pred_valid_file = f'pred_valid{from_date}_{to_date}.pickle'
 
 NONEED_COLUMNS = [
     'id', 'result', 'time', 'margin', 'pop', 'odds', 'last3f', \

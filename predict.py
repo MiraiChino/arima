@@ -542,25 +542,32 @@ def calc_odds(baken, race_id, top=100, task_logs=[]):
 
 def good_baken(baken, odd_th=2.0):
     for b_type, b in baken.items():
-        # nanを除外して合成オッズをフィルタリング
-        index_synodd2 = len([odd for odd in b.df["合成オッズ"] if odd is not None and odd_th <= odd])
-        top_odds = [odd for odd in b.df["オッズ"][:index_synodd2] if not np.isnan(odd)]
-        
-        bets = min_bet(top_odds)
-        if bets:
-            bets_str = [f"{bet}円" for bet in bets]
-            returns = [int(round(odd*bet, -1)) for odd, bet in zip(top_odds, bets)]
-            returns_str = [f"{ret}円" for ret in returns]
-            invest = sum(bets)
-            min_ret, max_ret = min(returns), max(returns)
+        bets = []
+        bets_str = []
+        returns = []
+        returns_str = []
+        for odd, synodd in zip(b.df["オッズ"], b.df["合成オッズ"]):
+            if odd is None or np.isnan(odd):
+                bets_str.append(None)
+                returns_str.append(None)
+            elif odd_th <= synodd:
+                bet = min_bet([odd])[0] if min_bet([odd]) else 0
+                bets.append(bet)
+                bets_str.append(f"{bet}円")
+                ret = int(round(odd * bet, -1))
+                returns.append(ret)
+                returns_str.append(f"{ret}円")
+            elif odd_th > synodd:
+                break
+
+        invest = sum(bets)
+        if invest > 0:
             bets_str.append(f"計: {invest}円")
+            min_ret, max_ret = min(returns), max(returns)
             returns_str.append(f"{min_ret}円~{max_ret}円")
         else:
             bets_str = ['']
             returns_str = ['']
-            invest = 0
-            returns = False
-            min_ret, max_ret = 0, 0
         b.df_return = pd.DataFrame()
         b.df_return["均等買い"] = pd.Series(bets_str)
         b.df_return["払戻"] = pd.Series(returns_str)

@@ -6,7 +6,7 @@ echo python netkeiba.py
 python netkeiba.py
 
 rm encoder*.pickle
-rm feature*.pickle
+rm feature*.feather
 rm ave*.feather
 rm feather/rating*.feather
 echo python feature.py

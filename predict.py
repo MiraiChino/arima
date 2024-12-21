@@ -542,35 +542,45 @@ def calc_odds(baken, race_id, top=100, task_logs=[]):
 
 def good_baken(baken, odd_th=2.0):
     for b_type, b in baken.items():
-        bets = []
-        bets_str = []
-        returns = []
-        returns_str = []
+        top_odds = []
         for odd, synodd in zip(b.df["オッズ"], b.df["合成オッズ"]):
             if odd is None or np.isnan(odd):
-                bets_str.append(None)
-                returns_str.append(None)
+                top_odds.append(None)
             elif odd_th <= synodd:
-                bet = min_bet([odd])[0] if min_bet([odd]) else 0
-                bets.append(bet)
-                bets_str.append(f"{bet}円")
-                ret = int(round(odd * bet, -1))
-                returns.append(ret)
-                returns_str.append(f"{ret}円")
+                top_odds.append(odd)
             elif odd_th > synodd:
                 break
 
+        valid_odds = [odd for odd in top_odds if odd is not None and not np.isnan(odd)]
+        bets = min_bet(valid_odds)
+        if bets:
+            bets_str = [f"{bet}円" for bet in bets]
+            returns = [int(round(odd*bet, -1)) for odd, bet in zip(valid_odds, bets)]
+            returns_str = [f"{ret}円" for ret in returns]
+            invest = sum(bets)
+            min_ret, max_ret = min(returns), max(returns)
+
+        bets_str_with_none = []
+        returns_str_with_none = []
+        for odd in top_odds:
+            if odd is None or np.isnan(odd):
+                bets_str_with_none.append(None)
+                returns_str_with_none.append(None)
+            else:
+                bets_str_with_none.append(bets_str.pop(0))
+                returns_str_with_none.append(returns_str.pop(0))
+            
         invest = sum(bets)
         if invest > 0:
-            bets_str.append(f"計: {invest}円")
+            bets_str_with_none.append(f"計: {invest}円")
             min_ret, max_ret = min(returns), max(returns)
-            returns_str.append(f"{min_ret}円~{max_ret}円")
+            returns_str_with_none.append(f"{min_ret}円~{max_ret}円")
         else:
-            bets_str = ['']
-            returns_str = ['']
+            bets_str_with_none = ['']
+            returns_str_with_none = ['']
         b.df_return = pd.DataFrame()
-        b.df_return["均等買い"] = pd.Series(bets_str)
-        b.df_return["払戻"] = pd.Series(returns_str)
+        b.df_return["均等買い"] = pd.Series(bets_str_with_none)
+        b.df_return["払戻"] = pd.Series(returns_str_with_none)
         b.df.index += 1
     return baken
 

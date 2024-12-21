@@ -115,7 +115,15 @@ def synthetic_odds(odds):
     return 1 / sum(1/o for o in odds)
 
 def cumulative_odds(odds):
-    return [synthetic_odds(odds[:i]) for i in range(1, len(odds)+1)]
+    # Noneを含む場合はNoneを返し、それ以外は合成オッズを計算
+    cumulative = []
+    for i in range(1, len(odds) + 1):
+        valid_odds = [o for o in odds[:i] if o is not None]
+        if len(valid_odds) < i:
+            cumulative.append(None)
+        else:
+            cumulative.append(synthetic_odds(valid_odds))
+    return cumulative
 
 def cumulative_prob(prob):
     return [sum(prob[:i]) for i in range(1, len(prob)+1)]
@@ -487,7 +495,7 @@ def pretty_baken(baken, top=100):
         odds = []
         for nums in b.nums:
             try:
-                odds.append(b.odds.get(nums, 1))
+                odds.append(b.odds.get(nums, None))
             except Exception as e:
                 print(f"{e}: Not found {nums}")
         b.df["確率"] = pd.Series([f"{p*100:.2f}%" for p in b.df["確率"].values])
@@ -552,7 +560,7 @@ def good_baken(baken, odd_th=2.0):
             returns = False
             min_ret, max_ret = 0, 0
         b.df_return = pd.DataFrame()
-        b.df_return["均等買い"] = pd.Series(bets_str)
+        b.df_return["��等買い"] = pd.Series(bets_str)
         b.df_return["払戻"] = pd.Series(returns_str)
         b.df.index += 1
     return baken

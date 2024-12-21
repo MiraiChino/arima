@@ -370,38 +370,22 @@ def result_bakenhit(df_past, task_logs=[]):
     task_logs.append(f'loading {config.breakpoint_file}')
     with open(config.breakpoint_file, "rb") as f:
         breakpoints = pickle.load(f)
-
-    
-    models_dir = Path("models/")
-    pattern = re.compile(rf"(\d+)_{config.bakenhit_lgb_reg.feature_importance_model.file}")
-    # 最大のiを探す
-    max_i = -1
-    for file in models_dir.iterdir():  # フォルダ内の全ファイルを探索
-        if file.is_file():  # ファイルのみを対象
-            match = pattern.match(file.name)
-            if match:
-                i = int(match.group(1))  # iを数値として取得
-                if i > max_i:
-                    max_i = i
-
-    feature_importance_model = l1_models[f"{max_i}_{config.bakenhit_lgb_reg.feature_importance_model.model_name}"]
-    importance = pl.DataFrame({
-        "column": feature_importance_model.feature_name(),
-        "importance": feature_importance_model.feature_importance(importance_type='gain')
-    }).sort(by="importance", descending=True)
-    importance_head = importance.head(config.bakenhit_lgb_reg.feature_importance_len)
-    important_columns = importance_head.get_column("column").to_list()
+   
+    important_columns = list(breakpoints.keys())
     noneed = ["race_id", "race_date"] + config.NONEED_COLUMNS
     df_past = df_past[important_columns].drop(columns=noneed, errors="ignore")
     race_dict = bin_race_dict(df_past, breakpoints, config.bakenhit_lgb_reg.bins, task_logs)
     race_features_df = pl.DataFrame([race_dict])
 
-    task_logs.append(f'loading models/{config.bakenhit_lgb_reg.file}')
-    with open(f"models/{config.bakenhit_lgb_reg.file}", "rb") as f:
-        model = pickle.load(f)
-    values = race_features_df[model.feature_name()].to_pandas().values
-    pred = model.predict(values, num_iteration=model.best_iteration)
-    task_logs.append(f'bakenhit prob {pred}')
+    task_logs.append(f'loading {config.bakenhit_lgb_reg.file}')
+    if Path(f"{config.bakenhit_lgb_reg.file}").exists():
+        with open(f"{config.bakenhit_lgb_reg.file}", "rb") as f:
+            model = pickle.load(f)
+        values = race_features_df[model.feature_name()].to_pandas().values
+        pred = model.predict(values, num_iteration=model.best_iteration)
+        task_logs.append(f'bakenhit prob {pred}')
+    else:
+        return 0
     return pred.tolist()[0]
 
 def baken_prob(prob, names):

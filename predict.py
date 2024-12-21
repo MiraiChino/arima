@@ -378,13 +378,14 @@ def result_bakenhit(df_past, task_logs=[]):
     race_features_df = pl.DataFrame([race_dict])
 
     task_logs.append(f'loading {config.bakenhit_lgb_reg.file}')
-    if Path(f"{config.bakenhit_lgb_reg.file}").exists():
+    try:
         with open(f"{config.bakenhit_lgb_reg.file}", "rb") as f:
-            model = pickle.load(f)
+            model, pred_valid_x = pickle.load(f)
         values = race_features_df[model.feature_name()].to_pandas().values
         pred = model.predict(values, num_iteration=model.best_iteration)
         task_logs.append(f'bakenhit prob {pred}')
-    else:
+    except:
+        task_logs.append(f'Could not predict bakenhit prob')
         return 0
     return pred.tolist()[0]
 
@@ -486,7 +487,7 @@ def pretty_baken(baken, top=100):
         odds = []
         for nums in b.nums:
             try:
-                odds.append(b.odds[nums])
+                odds.append(b.odds.get(nums, None))
             except Exception as e:
                 print(f"{e}: Not found {nums}")
         b.df["確率"] = pd.Series([f"{p*100:.2f}%" for p in b.df["確率"].values])

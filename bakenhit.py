@@ -248,8 +248,11 @@ def image_base64_kde_with_axvline(x):
     matplotlib.use('Agg')
 
     print(f"loading {config.bakenhit_lgb_reg.file}")
-    with open(config.bakenhit_lgb_reg.file, "rb") as f:
-        pred_valid_x = pickle.load(f)
+    try:
+        with open(config.bakenhit_lgb_reg.file, "rb") as f:
+            model, pred_valid_x = pickle.load(f)
+    except:
+        return "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
     print(f"ploting")
     plt, peak_x = plot_kde_with_peak(pred_valid_x)
 
@@ -314,10 +317,10 @@ if __name__ == "__main__":
         logger.info(f'Validation RMSE: {rmse:.4f}')
 
         with open(config.bakenhit_lgb_reg.file, 'wb') as f:
-            pickle.dump(pred_valid_x, f)
+            pickle.dump((model, pred_valid_x), f)
     elif Path(config.bakenhit_lgb_reg.file).exists():
         with open(config.bakenhit_lgb_reg.file, "rb") as f:
-            pred_valid_x = pickle.load(f)
+            model, pred_valid_x = pickle.load(f)
 
         import matplotlib
         matplotlib.use('MacOSX')

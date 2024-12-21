@@ -487,7 +487,7 @@ def pretty_baken(baken, top=100):
         odds = []
         for nums in b.nums:
             try:
-                odds.append(b.odds.get(nums, None))
+                odds.append(b.odds.get(nums, 1))
             except Exception as e:
                 print(f"{e}: Not found {nums}")
         b.df["確率"] = pd.Series([f"{p*100:.2f}%" for p in b.df["確率"].values])

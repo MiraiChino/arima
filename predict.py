@@ -115,13 +115,13 @@ def synthetic_odds(odds):
     return 1 / sum(1/o for o in odds)
 
 def cumulative_odds(odds):
-    # Noneを含む場合はNoneを返し、それ以外は合成オッズを計算
+    # nanを含む場合はその位置だけNoneにし、それ以外は合成オッズを計算
     cumulative = []
     for i in range(1, len(odds) + 1):
-        valid_odds = [o for o in odds[:i] if o is not None]
-        if len(valid_odds) < i:
+        if np.isnan(odds[i-1]):
             cumulative.append(None)
         else:
+            valid_odds = [o for o in odds[:i] if not np.isnan(o)]
             cumulative.append(synthetic_odds(valid_odds))
     return cumulative
 
@@ -503,9 +503,9 @@ def pretty_baken(baken, top=100):
         b.df["期待値"] = b.df["オッズ"] * pd.Series(probs)
         b.df["期待値"] = pd.Series([round(p, 2) for p in b.df["期待値"].values])
         b.df["累積確率"] = pd.Series([f"{p*100:.2f}%" for p in cum_probs])
-        b.df["合成オッズ"] = pd.Series([round(p, 2) for p in cumulative_odds(b.df["オッズ"].values)])
+        b.df["合成オッズ"] = pd.Series([round(p, 2) if p else None for p in cumulative_odds(b.df["オッズ"].values)])
         b.df["合成期待値"] = b.df["合成オッズ"] * pd.Series(cum_probs)
-        b.df["合成期待値"] = pd.Series([round(p, 2) for p in b.df["合成期待値"].values])
+        b.df["合成期待値"] = pd.Series([round(p, 2) if p else None for p in b.df["合成期待値"].values])
     return baken
 
 def calc_odds(baken, race_id, top=100, task_logs=[]):
@@ -542,8 +542,10 @@ def calc_odds(baken, race_id, top=100, task_logs=[]):
 
 def good_baken(baken, odd_th=2.0):
     for b_type, b in baken.items():
-        index_synodd2 = len([odd for odd in b.df["合成オッズ"] if odd_th <= odd])
-        top_odds = b.df["オッズ"][:index_synodd2]
+        # nanを除外して合成オッズをフィルタリング
+        index_synodd2 = len([odd for odd in b.df["合成オッズ"] if odd is not None and odd_th <= odd])
+        top_odds = [odd for odd in b.df["オッズ"][:index_synodd2] if not np.isnan(odd)]
+        
         bets = min_bet(top_odds)
         if bets:
             bets_str = [f"{bet}円" for bet in bets]
@@ -560,7 +562,7 @@ def good_baken(baken, odd_th=2.0):
             returns = False
             min_ret, max_ret = 0, 0
         b.df_return = pd.DataFrame()
-        b.df_return["��等買い"] = pd.Series(bets_str)
+        b.df_return["均等買い"] = pd.Series(bets_str)
         b.df_return["払戻"] = pd.Series(returns_str)
         b.df.index += 1
     return baken
